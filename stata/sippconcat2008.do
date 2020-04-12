@@ -119,6 +119,21 @@ gen fEE = (Eend==1 & JCend_any==1) | (Estart==1 & JCstart_any==1) if lfstat==1 &
 gen EE = l.fEE==1 if lfstat==1 & l.lfstat==1
 
 label var EE "J2J to transition last period, using start-end dates and job numbers"
+
+gen EUdate = date if EU==1
+gen ENdate = date if EN==1
+
+replace EUdate = 0 if lfstat==1
+replace ENdate = 0 if lfstat==1
+xtset uid date
+
+by uid: carryforward EUdate, gen(lastEUdate)
+by uid: carryforward ENdate, gen(lastENdate)
+gen utime = date - lastEUdate if lfstat>1 & lastEUdate >0
+gen ntime = date - lastENdate if lfstat>1 & lastENdate >0
+egen uspellid = group(uid lastEUdate) if lfstat>1 & utime <.
+egen nspellid = group(uid lastENdate) if lfstat>1 & ntime <.
+
 drop Eend Estart JCstart JCend
 
 // defined following Flaaen, Shapiro Sorkin (AEJ Macro 2019) https://www.aeaweb.org/articles?id=10.1257/mac.20170162
