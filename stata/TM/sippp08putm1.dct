@@ -1,0 +1,179 @@
+infile dictionary { 
+*This program reads the 2008 SIPP Wave 1 Topical Module Data File
+*by Jean Roth Wed Nov  3 15:55:40 EDT 2010
+
+*Please report errors to jroth.org
+*See the .do file for directions and run with do sippp08putm1
+*NOTE:  This program is distributed under the GNU GPL. 
+*See end of this file and http://www.gnu.org/licenses/ for details.
+*by Jean Roth Wed Nov  3 15:55:40 EDT 2010
+*Please report errors to jroth@nber.org
+*run with do sippp08putm1
+*Change output file name/location as desired in the first line of the .dct file
+*If you are using a PC, you may need to change the direction of the slashes, as in C:\
+*  or "\\Nber\home\data\sipp\2008\sippp08putm1.dat"
+* The following changes in variable names have been made, if necessary:
+*      '$' to 'd';            '-' to '_';              '%' to 'p';
+* Note:  Variable names in Stata are case-sensitive
+
+_column(1   )   long ssuseq      %5f "SU: Sequence Number of Sample Unit - Primary"
+_column(6   )  str12 ssuid      %12s "SU: Sample Unit Identifier"            
+_column(18  )    int spanel      %4f "SU: Sample Code - Indicates Panel Year"
+_column(22  )   byte swave       %2f "SU: Wave of data collection"           
+_column(24  )   byte srotaton    %1f "SU: Rotation of data collection"       
+_column(25  )   byte tfipsst     %2f "HH: FIPS State Code"                   
+_column(27  )    int shhadid     %3f "SU: Hhld Address ID differentiates hhlds in"
+_column(30  )    int eoutcome    %3f "HH: Interview Status code for this household"
+_column(33  )    int rfid        %3f "FA: Family ID Number for this month"   
+_column(36  )    int rfid2       %3f "FA: Family ID excluding related subfamily"
+_column(39  )    int eppidx      %3f "PE: Person index"                      
+_column(42  )   str3 eentaid     %3s "PE: Address ID of hhld where person entered"
+_column(45  )   str4 epppnum     %4s "PE: Person number"                     
+_column(49  )   byte epopstat    %1f "PE: Population status based on age in 4th"
+_column(50  )   byte eppintvw    %2f "PE: Person's interview status"         
+_column(52  )   byte eppmis4     %1f "PE: Person's 4th month interview status"
+_column(53  )   byte esex        %1f "PE: Sex of this person"                
+_column(54  )   byte erace       %1f "PE: The race(s) the respondent is"     
+_column(55  )   byte eorigin     %2f "PE: Spanish, Hispanic or Latino"       
+_column(57  ) double wpfinwgt %10.4f "WW: Person weight"                     
+_column(67  )   byte errp        %2f "PE: Household relationship"            
+_column(69  )   byte tage        %2f "PE: Age as of last birthday"           
+_column(71  )   byte ems         %1f "PE: Marital status"                    
+_column(72  )    int epnspous    %4f "PE: Person number of spouse"           
+_column(76  )    int epnmom      %4f "PE: Person number of mother"           
+_column(80  )    int epndad      %4f "PE: Person number of father"           
+_column(84  )    int epnguard    %4f "PE: Person number of guardian"         
+_column(88  )   byte rdesgpnt    %2f "PE: Designated parent or guardian flag"
+_column(90  )   byte eeducate    %2f "ED: Highest Degree received or grade completed"
+_column(92  )   str8 lgtkey      %8s "PE: Person longitudinal key"           
+_column(100 )    int sinthhid    %3f "SU: Hhld Address ID of person in interview"
+_column(103 )   byte earcunv     %2f "REC: Universe indicator."              
+_column(105 )   byte ecurafdc    %2f "REC: Any other time authorized to recieve"
+_column(107 )   byte acurafdc    %1f "REC: Allocation flag for ECURAFDC"     
+_column(108 )   byte eevrgard    %2f "REC: Has ... ever had a child or served as a"
+_column(110 )   byte avergard    %1f "REC: Allocation flag for EEVRGARD"     
+_column(111 )   byte eaplafdc    %2f "REC: Ever applied for AFDC, TANF, or state"
+_column(113 )   byte aaplafdc    %1f "REC: Allocation flag for EAPLAFDC"     
+_column(114 )   byte ercvafdc    %2f "REC: Authorized to receive AFDC, TANF, or"
+_column(116 )   byte arcvafdc    %1f "REC: Allocation flag for ERCVAFDC"     
+_column(117 )    int tafdcsty    %4f "REC: Year 1st received AFDC, TANF, or state"
+_column(121 )   byte aafdcsty    %1f "REC: Allocation flag for TAFDCSTY"     
+_column(122 )    int tafdcly     %4f "REC: Year last received AFDC, TANF, or state"
+_column(126 )   byte aafdcly     %1f "REC: Allocation flag for TAFDCLY"      
+_column(127 )   byte tafdctim    %2f "REC: Number of times received AFDC, TANF, or"
+_column(129 )   byte aafdctim    %1f "REC: Allocation flag for TAFDCTIM"     
+_column(130 )   byte ecurssi     %2f "REC: Any other time authorized to recieve SSI"
+_column(132 )   byte acurssi     %1f "REC: Allocation flag for ECURSSI"      
+_column(133 )   byte eaplssi     %2f "REC: Ever applied for SSI program"     
+_column(135 )   byte aaplssi     %1f "REC: Ever applied for SSI allocation flag"
+_column(136 )   byte erecvssi    %2f "REC: Authorized to receive SSI"        
+_column(138 )   byte arecvssi    %1f "REC: Authorized to receive SSI allocation flag"
+_column(139 )    int tssistry    %4f "REC: Year first received SSI benefits" 
+_column(143 )   byte assistry    %1f "REC: Allocation flag for TSSISTRY"     
+_column(144 )    int tssily      %4f "REC: Last year received SSI(years)"    
+_column(148 )   byte assily      %1f "REC: Allocation flag for TSSILY"       
+_column(149 )   byte ecurfs      %2f "REC: Other times when authorized to receive"
+_column(151 )   byte acurfs      %1f "REC: Allocation flag for ECURFS"       
+_column(152 )   byte eaplfs      %2f "REC: Ever applied for Food Stamp Program"
+_column(154 )   byte aaplfs      %1f "REC: Allocation flag for EAPLFS"       
+_column(155 )   byte erecvfs     %2f "REC: Authorized to receive Food Stamps (SNAP)"
+_column(157 )   byte arecvfs     %1f "REC: Allocation flag for ERECVFS"      
+_column(158 )    int tfsstryr    %4f "REC: Year first received food stamps (SNAP)"
+_column(162 )   byte afsstryr    %1f "REC: Allocation flag for TFSSTRYR"     
+_column(163 )    int tfsly       %4f "REC: Length of time received food stamps"
+_column(167 )   byte afsly       %1f "REC: Allocation flag for TFSLY"        
+_column(168 )   byte tfstimes    %2f "REC: Number of separate times go on food"
+_column(170 )   byte afstimes    %1f "REC: Allocation flag for TFSTIMES"     
+_column(171 )   byte eaemunv     %2f "EMP: Universe indicator."              
+_column(173 )   byte ewk1bfor    %2f "EMP: Whether working before start of job held"
+_column(175 )   byte awk1bfor    %1f "EMP: Allocation flag for EWK1BFOR"     
+_column(176 )    int twk1lsjb    %4f "EMP: Yr last work at pd job/bus(before jb/bus"
+_column(180 )   byte awk1lsjb    %1f "EMP: Allocation flag for TWK1LSTJB"    
+_column(181 )    int tlstwrky    %4f "EMP: Yr last worked at pd jb/bs(not working"
+_column(185 )   byte alstwrky    %1f "EMP: Allocation flag for TLSTWRKY"     
+_column(186 )    int tprvjbyr    %4f "EMP: Yr last wrk before job/bus started aft"
+_column(190 )   byte aprvjbyr    %1f "EMP: Allocation flag for TPRVJBYR"     
+_column(191 )    int tfrmryr     %4f "EMP: Year started last paid job/business"
+_column(195 )   byte afrmryr     %1f "EMP: Allocation flag for TFRMRYR"      
+_column(196 )    int tmakmnyr    %4f "EMP: Year first work at job/bus for 6" 
+_column(200 )   byte amakmnyr    %1f "EMP: Allocation flag for TMAKMNYR"     
+_column(201 )   byte eno6all1    %2f "EMP: Reason never worked at a long-term pd"
+_column(203 )   byte eno6all2    %2f "EMP: Reason never worked at a long-term pd"
+_column(205 )   byte eno6all3    %2f "EMP: Reason never worked at a long-term pd"
+_column(207 )   byte eno6all4    %2f "EMP: Reason never worked at a long-term pd"
+_column(209 )   byte eno6all5    %2f "EMP: Reason never worked at a long-term pd"
+_column(211 )   byte eno6all6    %2f "EMP: Reason never worked at a long-term pd"
+_column(213 )   byte eno6all7    %2f "EMP: Reason never worked at a long-term pd"
+_column(215 )   byte eno6all8    %2f "EMP: Reason never worked at a long-term pd"
+_column(217 )   byte eno6all9    %2f "EMP: Reason never worked at a long-term pd"
+_column(219 )   byte ano6all     %1f "EMP: Allocation flag for ENO6ALL1 thru"
+_column(220 )   byte emnreson    %2f "EMP: Main reason never worked at a long-term"
+_column(222 )   byte amnreson    %1f "EMP: Allocation flag for EMNRESON"     
+_column(223 )   byte eanyoff     %2f "EMP: Ever not wrk 6 straight mos since 1st"
+_column(225 )   byte aanyoff     %1f "EMP: Allocation flag for EANYOFF"      
+_column(226 )   byte ehowmany    %2f "EMP: Number of times did not work 6 months"
+_column(228 )   byte ahowmany    %1f "EMP: Allocation flag for EHOWMANY"     
+_column(229 )   long etimeoff    %5f "EMP: Cumulative time out of wrk 6 months or"
+_column(234 )   byte atimeoff    %1f "EMP: Allocation flag for ETIMEOFF"     
+_column(235 )   byte ewrk35hr    %2f "EMP: Usually worked 35 or more hours per week"
+_column(237 )   byte awrk35hr    %1f "EMP: Allocation flag for EWRK35HR"     
+_column(238 )   byte eoff6mtn    %2f "EMP: Ever stopped working to become a" 
+_column(240 )   byte aoff6mtn    %1f "EMP: Allocation flag for EOFF6MTN"     
+_column(241 )   byte eothtime    %2f "EMP: Stopped working more than once to become"
+_column(243 )   byte aothtime    %1f "EMP: Allocation flag for EOTHTIME"     
+_column(244 )   byte ecntothr    %2f "EMP: Num of add'l times stopped work to be a"
+_column(246 )   byte acntothr    %1f "EMP: Allocation flag for ECNTOTHR"     
+_column(247 )    int tnowrkfr    %4f "EMP: Start yr, recent/only time not wrk to be"
+_column(251 )   byte anowrkfr    %1f "EMP: Allocation flag for TNOWRKFR"     
+_column(252 )    int tnowrkto    %4f "EMP: End year,recent/only time not work to be"
+_column(256 )   byte anowrkto    %1f "EMP: Allocation flag for TNOWRKTO"     
+_column(257 )    int tfstyrfr    %4f "EMP: Start year, first time not work to be a"
+_column(261 )   byte afstyrfr    %1f "EMP: Allocation flag for TFSTYRFR"     
+_column(262 )    int tfstyrto    %4f "EMP: Ending year, first time not work to be a"
+_column(266 )   byte afstyrto    %1f "EMP: Allocation flag for TFSTYRTO"     
+_column(267 )   byte enwall1     %2f "EMP: Recipient of most recent/only episode of"
+_column(269 )   byte enwall2     %2f "EMP: Recipient of most recent/only episode of"
+_column(271 )   byte enwall3     %2f "EMP: Recipient of most recent/only episode of"
+_column(273 )   byte anwall      %1f "EMP: Allocation flag for ENWALL1, ENWALL2 and"
+_column(274 )   byte enwresn     %2f "EMP: Main caregiving responsibilty"    
+_column(276 )   byte anwresn     %1f "EMP: Allocation flag for ENWRESN"      
+_column(277 )   byte efstall1    %2f "EMP: Recipient of first of 2+ episode of"
+_column(279 )   byte efstall2    %2f "EMP: Recipient of first of 2+ episode of"
+_column(281 )   byte efstall3    %2f "EMP: Recipient of first of 2+ episode of"
+_column(283 )   byte afstall     %1f "EMP: Allocation flag for EFRSTALL1,"   
+_column(284 )   byte efrstrsn    %2f "EMP: Main pers helped in first of 2+ times of"
+_column(286 )   byte afrstrsn    %1f "EMP: Allocation flag for EFRSTRSN"     
+_column(287 )   byte eatrunv     %2f "TXR: Universe indicator."              
+_column(289 )   byte erebate     %2f "TXR: Tax rebate received yes or no"    
+_column(291 )   byte arebate     %1f "TXR: Allocation flag for EREBATE"      
+_column(292 )   byte erbamth     %2f "TXR: Tax Rebate month received"        
+_column(294 )   byte arbamth     %1f "TXR: Allocation flag for ERBAMTH"      
+_column(295 )    int erbatamt    %4f "TXR: Tax Rebate amount"                
+_column(299 )   byte arbatamt    %1f "TXR: Allocation flag for ERBATAMT"     
+_column(300 )   byte erbattyp    %2f "TXR: Tax Rebate how receieved"         
+_column(302 )   byte arbattyp    %1f "TXR: Allocation flag for ERBATTYP"     
+_column(303 )   byte erebatoc    %2f "TXR: Tax Rebate how spent"             
+_column(305 )   byte arebatoc    %1f "TXR: Allocation flag for EREBATOC"     
+
+}
+
+** Copyright 2010 shared by the National Bureau of Economic Research and Jean Roth ;
+
+** National Bureau of Economic Research. ;
+** 1050 Massachusetts Avenue ;
+** Cambridge, MA 02138 ;
+** jroth@nber.org ;
+
+** This program and all programs referenced in it are free software. You ;
+** can redistribute the program or modify it under the terms of the GNU ;
+** General Public License as published by the Free Software Foundation; 
+** either version 2 of the License, or (at your option) any later version. ;
+
+** This program is distributed in the hope that it will be useful, ;
+** but WITHOUT ANY WARRANTY, without even the implied warranty of ;
+** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the ;
+** GNU General Public License for more details. ;
+
+** You should have received a copy of the GNU General Public License ;
+** along with this program, if not, write to the Free Software ;
+** Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA. ;
