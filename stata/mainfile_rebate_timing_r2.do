@@ -2,6 +2,10 @@
 gl sipp_rebate ~/Dropbox/rebate_timing/
 */
 
+/* davide's dropbox 
+gl sipp_rebate /Users/rcedxm19/Dropbox/rebate_timing/
+*/
+
 // laura's dropbox 
 gl sipp_rebate /Users/gregorjarosch/Dropbox/rebate_timing/
 use ${sipp_rebate}data/sippsets08_MPC.dta, clear
@@ -22,8 +26,6 @@ replace erbatamt = 0 if erbatamt==.
 gen hhhead_errp1 = (inlist(errp,1,2) & wave==1 & srefmon==1)			// Laura's new definition: just the reference person
 bys uid: egen hhhead_errp = max(hhhead_errp1)
 
-// Create sub/primary family ID
-egen sfid = group(ssuid shhadid rfid2 rsid)
 
 gen temp = age if hhhead_errp==1 & wave==1 & srefmon==1	 			// will be missing for everyone except the hhhead in the first appearance
 bys hhid: egen hhhead_age = min(temp)			// age of your household head first time they in sample
@@ -39,24 +41,32 @@ recode ms (1/2=1) (nonmiss=0), gen(married)
 bys hhid date: egen hh_rebate_ind  = max(p_rebate_ind)
 label var hh_rebate_ind "indicator for household rebate receipt this month"
 
+
+// indicators for welfare programs
 gen hh_foodstamp_ind =(thfdstp>0)
 label var hh_foodstamp_ind "indicator for household food stamp receipt this month"
-sort uid date
-tsset uid date
-gen hh_foodstamp_new_ind=(L.hh_foodstamp_ind==0 & hh_foodstamp_ind==1)
-label var hh_foodstamp_new_ind "indicator for household started food stamps this month"
-gen hh_foodstamp_off_ind=(L.hh_foodstamp_ind==1 & hh_foodstamp_ind==0)
-label var hh_foodstamp_off_ind "indicator for household went off food stamps this month"
 
+gen hh_housing_ind = (hsg_r==1)
+label var hh_housing_ind "indicator for household housing assistance receipt this month"
 
 gen hh_foodass_ind =(efoodtp1==1 | efoodtp2==2 | efoodtp3==1 | efoodtp4==1)
 label var hh_foodass_ind "indicator for household food assistance receipt this month"
 
-gen hh_foodass_new_ind=(L.hh_foodass_ind==0 & hh_foodass_ind==1)
-label var hh_foodass_new_ind "indicator for household started food assistance this month"
-gen hh_foodass_off_ind=(L.hh_foodass_ind==1 & hh_foodass_ind==0)
-label var hh_foodass_off_ind "indicator for household went off food assistance this month"
+gen hh_welfare_ind =(welfare_r==1)
+label var hh_foodass_ind "indicator for household welfare receipt this month"
 
+gen hh_ui_ind =(ui_r==1)
+label var hh_ui_ind "indicator for received ui this month"
+
+gen hh_energy_ind =(enrgy_r==1)
+label var hh_energy_ind "indicator for household Energy Assistance receipt this month"
+
+gen hh_pubhousing_ind =(pubhou_r==1)
+label var hh_pubhousing_ind "indicator for public housing receipt this month"
+
+
+gen hh_rentsubsidy_ind =(lowrent_r==1)
+label var hh_rentsubsidy_ind "indicator for rent subsidy this month"
 
 
 recode eafood1 (1/2=0) (3/4=1), gen(hh_food_insuf)
@@ -76,92 +86,53 @@ recode hh_size (1=1) (2=2) (3=3) (4=4) (5=5) (nonmiss=6), gen(hh_size2)
 gen cohabiting = (errp==10)
 bys hhid date: egen cohab2=max(cohabiting)
 
-save ${sipp_rebate}data/rebatedata_cleaned.dta, replace
-
-*************************************************************
-* let's try to replicate Powell's stuff 
-*************************************************************
-local cohab_drop 0
-
-use ${sipp_rebate}data/rebatedata_cleaned.dta, clear
-keep if inlist(wave,1,2) 			// he only uses waves 1,2
-count
-
-* drop if missing household labor earnings in any of the 8 months you are present *
-bys hhid uid: egen p_count_nonmiss = count(thearn) // non-missing household earnings count
-gen head_nonmiss_thearn = p_count_nonmiss if hhhead_errp==1
-bys hhid: egen hh_count_nonmiss = max(head_nonmiss_thearn) // non-missing household earnings count
-keep if hh_count_nonmiss==8
-count
-drop hh_count_nonmiss
-
-* exclude household with cohabiting non-married couples 
-if `cohab_drop'==1 {
-	gen temp = (inrange(ms,3,6) & cohab2==1 & wave==1 & srefmon==1 & hhhead_errp==1)
-	bys hhid: egen cohab3 = max(temp)
-	drop if cohab3==1
-	count
-	}
-
-* keep only households whos head is between 25 and 60
-keep if inrange(hhhead_age,25,60)
-count
+// number of unique rfid2 values within hhhid and date
+egen family_num1 = nvals(rfid), by(hhid date) 
+egen family_num2 = nvals(rfid2), by(hhid date) 
 
 
-
-
-egen flag = tag(hhid)			// so we only use one observation per month per hh
-sum  hh_rebate_ever if hhhead_errp==1 & inlist(ms,1,2) 
-sum  hh_rebate_ever if hhhead_errp==1 & inlist(ms,3,6) & flag==1
-
-// calculate sum of rebate over the month
 tsset uid date
 sort uid date
-gen hhRit = hh_erbatamt+L.hh_erbatamt
-gen hhLRit = L3.hh_erbatamt+L4.hh_erbatamt
-gen hhRit_ind= (hhRit>0)
-gen hhLRit_ind = (hhLRit>0)
 
-gen Rit = erbatamt+L.erbatamt
-gen LRit = L3.erbatamt+L4.erbatamt
-gen Rit_ind = (Rit>0)
-gen LRit_in = (LRit>0)
+gen hhRit_ind= (hh_erbatamt>0)
+gen hhLRit_ind = (L.hh_erbatamt>0)
 
-// Table 2 stats //
-sum hh_size2 if inrange(ms,3,6) & wave==1 & srefmon==1 & hhhead_errp==1
-sum hh_size2 if inrange(ms,1,2) & wave==1 & srefmon==1 & hhhead_errp==1
-tab hh_rebate_ever if inrange(ms,3,6) & wave==1 & srefmon==1 & hhhead_errp==1
-tab hh_rebate_ever if inlist(ms,1,2) & wave==1 & srefmon==1 & hhhead_errp==1
-sum erbatamt hh_erbatamt if erbatamt>0 & inrange(ms,3,6) & hhhead_errp==1
-sum erbatamt hh_erbatamt if erbatamt>0 & inrange(ms,1,2) & hhhead_errp==1
+gen Rit_ind = (erbatamt>0)
 
-gen have_earning = (thearn>0)
-tab have_earning if inrange(ms,3,6)  & hhhead_errp==1
-tab have_earning if inrange(ms,1,2)  & hhhead_errp==1
-
-sum thearn if inrange(ms,3,6)  & hhhead_errp==1, det
-sum thearn if inrange(ms,1,2)  & hhhead_errp==1, det
-count if inrange(ms,3,6) & wave==1 & srefmon==1 & hhhead_errp==1 
-count if inlist(ms,1,2) & wave==1 & srefmon==1 & hhhead_errp==1 
-
-// Mean regressions
-keep if inlist(hhhead_errp,1)
-
-// hh rebate variables
-qui areg thearn hhRit hhLRit i.date#i.srefmon#i.married#i.hh_size2 [aw=whfnwgt], absorb(hhid)
-est table, star(.05 .01 .001) keep(hhRit hhLRit) 
-
-qui areg thearn hhRit hhLRit i.date#i.srefmon#i.hh_size2  if married==0 [aw=whfnwgt], absorb(hhid)
-est table, star(.05 .01 .001) keep(hhRit hhLRit) 
-
-// hh head rebate variables
-qui areg thearn Rit LRit i.date#i.srefmon#i.married#i.hh_size2  [aw=whfnwgt], absorb(hhid)
-est table, star(.05 .01 .001) keep(Rit LRit) 
-
-qui areg thearn Rit LRit i.date#i.srefmon#i.hh_size2  if married==0 [aw=whfnwgt], absorb(hhid)
-est table, star(.05 .01 .001) keep(Rit LRit) 
+recode esr (1/5=1) (nonmiss=0), gen(employed_ind)
 
 
-qui areg thearn Rit LRit i.date#i.srefmon#i.married#i.hh_size2 [aw=whfnwgt], absorb(hhid)
-est table, star(.05 .01 .001) keep(Rit LRit) 
+// generate time since layoff
+egen time_since_lastjob = rowtotal(ntime utime), missing
+
+gen temp=time_since_lastjob if (erbatamt>0 & employed_ind==0)
+replace temp=-1 if (erbatamt>0 & employed_ind==1)
+
+bys uid: egen time_since_lastjobR = mean(temp)
+label var time_since_lastjobR "months since last job upon rebate receipt"
+
+drop temp
+
+gen temp=employed_ind if (erbatamt>0)
+bys uid: egen employed_indR = mean(temp)
+label var employed_indR "employment status upon rebate receipt"
+
+
+// attach displacement indicators to separations
+foreach dvar of varlist displaced displaced_layoff displaced_slackbiz displaced_empclosed {
+	gen `dvar'_stint = .
+	replace `dvar'_stint = `dvar' if (EU==1 | EN==1) & srefmon>1
+	replace `dvar'_stint = max(l.`dvar',`dvar') if (EU==1 | EN==1) & srefmon==1
+
+	bys uid uspellid: egen displaced_utmp = max(`dvar'_stint) if uspellid<.
+	bys uid nspellid: egen displaced_ntmp = max(`dvar'_stint) if nspellid<.
+
+	replace `dvar'_stint = displaced_utmp  if uspellid<.
+	replace `dvar'_stint = displaced_ntmp  if nspellid<.
+
+	drop displaced_utmp displaced_ntmp 
+	xtset uid date
+}
+save ${sipp_rebate}data/rebatedata_cleaned.dta, replace
+
 
