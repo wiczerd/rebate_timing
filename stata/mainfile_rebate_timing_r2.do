@@ -53,7 +53,7 @@ gen hh_foodass_ind =(efoodtp1==1 | efoodtp2==2 | efoodtp3==1 | efoodtp4==1)
 label var hh_foodass_ind "indicator for household food assistance receipt this month"
 
 gen hh_welfare_ind =(welfare_r==1)
-label var hh_foodass_ind "indicator for household welfare receipt this month"
+label var hh_welfare_ind "indicator for household welfare receipt this month"
 
 gen hh_ui_ind =(ui_r==1)
 label var hh_ui_ind "indicator for received ui this month"
@@ -133,6 +133,38 @@ foreach dvar of varlist displaced displaced_layoff displaced_slackbiz displaced_
 	drop displaced_utmp displaced_ntmp 
 	xtset uid date
 }
+
+// create wave-level versions of stuff:
+
+// Wave aggregate these things:
+by  uid:      gen erebate_1tmp = sum(erebate)
+bys uid wav: egen erebate_wave = max(erebate_1tmp==1)
+drop erebate_1tmp
+
+bys uid wave: egen nmo_wv = count(srefmon)
+foreach vi in foodstamp housing foodass welfare ui energy pubhousing rentsubsidy {
+	by uid wave: egen hh_`vi'_wvmax  = max(hh_`vi'_ind)
+	by uid wave: egen hh_`vi'_wvct   = total(hh_`vi'_ind)
+	gen hh_`vi'_wvfrac = hh_`vi'_wvct/ nmo_wv
+	gen hh_`vi'_wvall  = hh_`vi'_wvct==nmo_wv
+}
+// pull across the adult-welfare variables
+foreach vi of varlist eabmeet-aafday{
+	if(substr("`vi'",1,1) == "a"){
+		drop `vi'
+	}
+	else{
+		gen `vi'6 = `vi' if wave==6
+		by uid : egen `vi'wv6 = max(`vi'6)
+		gen `vi'9 = `vi' if wave==9
+		by uid : egen `vi'wv9 = max(`vi'9)
+		drop `vi'6 `vi'9
+	}
+}
+
+by uid: egen estimuse_max = max(estimuse)
+by uid: egen enotable_max = max(enotable)
+
 save ${sipp_rebate}data/rebatedata_cleaned.dta, replace
 
 
