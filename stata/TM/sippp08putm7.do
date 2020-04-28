@@ -1,14 +1,15 @@
 clear all
 cd ~/Dropbox/MPCwhose
 
+
 **------------------------------------------------;
 
-**  This program reads the 2008 SIPP Wave 4 Topical Module Data File 
+**  This program reads the 2008 SIPP Wave 7 Topical Module Data File 
 **  Note:  This program is distributed under the GNU GPL. See end of
 **  this file and http://www.gnu.org/licenses/ for details.
-**  by Jean Roth Tue Apr 12 18:06:08 EDT 2011
+**  by Jean Roth Fri Feb 17 11:42:26 EST 2012
 **  Please report errors to jroth@nber.org
-**  run with do sippp08putm4
+**  run with do sippp08putm7
 
 **-----------------------------------------------;
 
@@ -24,13 +25,14 @@ global save_dir ="/home/david/Dropbox/MPCwhose/"
 
 ** The following line should contain the path to the data dictionary file 
 
-local dct_name "sippp08putm4.dct"
+local dct_name "sippp08putm7.dct"
 
 ** The line below does NOT need to be changed 
-local dat_name  "${read_dir}p08putm4.dat"
+local dat_name  "${read_dir}p08putm7.dat"
 
 di "`dat_name'"
 quietly infile using "${read_dir}`dct_name'", using(`dat_name') clear
+
 
 **  Decimal places have been made explict in the dictionary file.
 **  Stata resolves a missing value of -1 / # of decimal places as a missing value.
@@ -141,11 +143,6 @@ label define eppintvw
 	4           "Noninterview - pseudo Type Z." 
 	5           "Children under 15 during"      
 ;
-label values eppmis4  eppmis4l;
-label define eppmis4l
-	1           "Interview"                     
-	2           "Non-interview"                 
-;
 label values esex     esex;   
 label define esex    
 	1           "Male"                          
@@ -238,38 +235,6 @@ label define eeducate
 label values sinthhid sinthhid;
 label define sinthhid
 	0           "Not In Universe"               
-;
-label values eaesunv  eaesunv;
-label define eaesunv 
-	-1          "Not in Universe"               
-	1           "In universe"                   
-;
-label values estimyn  estimyn;
-label define estimyn 
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values astimyn  astimyn;
-label define astimyn 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values estimuse estimuse;
-label define estimuse
-	-1          "Not in Universe"               
-	1           "Mostly to increase spending"   
-	2           "Mostly to increase saving"     
-	3           "Mostly to pay off debt"        
-;
-label values astimuse astimuse;
-label define astimuse
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
 ;
 label values ealunv   ealunv; 
 label define ealunv  
@@ -610,8 +575,8 @@ label define aalow
 	2           "Cold deck imputation"          
 	3           "Logical imputation (derivation)"
 ;
-label values ealowa   ealowa; 
-label define ealowa  
+label values talowa   talowa; 
+label define talowa  
 	0           "Not In Universe"               
 ;
 label values aalowa   aalowa; 
@@ -1097,7 +1062,7 @@ label define amor1pgm
 ;
 label values tmor2pr  tmor2pr;
 label define tmor2pr 
-	0           "Not In Universe"               
+	0           "None or not in universe"       
 	1           "Flag indicating principal on"  
 ;
 label values amor2pr  amor2pr;
@@ -1132,7 +1097,7 @@ label define amor2mo
 label values tmor2amt tmor2amt;
 label define tmor2amt
 	0           "None or not in universe"       
-	1           "Flag indicating second mortgage"
+	1           "Flag indicating reported amount"
 ;
 label values amor2amt amor2amt;
 label define amor2amt
@@ -1480,7 +1445,7 @@ label define acarvalm
 label values ta1year  ta1year;
 label define ta1year 
 	-1          "Not in Universe"               
-	9999        "Dont Know, Refusal, Blanks from"
+	9999        "Don't Know, Refusal, Blanks from"
 ;
 label values ea1owed  ea1owed;
 label define ea1owed 
@@ -1549,8 +1514,8 @@ label values ta2year  ta2year;
 label define ta2year 
 	-1          "Not in Universe"               
 	1986        "Recode for year less than 1986"
-	1990        "Recode for year 1987-1990"     
-	9999        "Dont Know, Refusal, Blanks from"
+	1991        "Recode for year 1987-1991"     
+	9999        "Don't Know, Refusal, Blanks from"
 ;
 label values ea2owed  ea2owed;
 label define ea2owed 
@@ -1618,12 +1583,12 @@ label define acarvalk
 label values ta3year  ta3year;
 label define ta3year 
 	-1          "Not in Universe"               
-	1969        "Recode for year less than 1969"
-	1978        "Recode for year 1970-1978"     
-	1984        "Recode for year 1979-1984"     
-	1987        "Recode for year 1985-1987"     
-	1990        "Recode for year 1988-1990"     
-	9999        "Dont Know, Refusal, Blanks from"
+	1971        "Recode for year less than 1971"
+	1980        "Recode for year 1972-1980"     
+	1986        "Recode for year 1981-1986"     
+	1989        "Recode for year 1987-1989"     
+	1991        "Recode for year 1990-1991"     
+	9999        "Don't Know, Refusal, Blanks from"
 ;
 label values ea3owed  ea3owed;
 label define ea3owed 
@@ -1859,8 +1824,8 @@ label values thhintot thhintot;
 label define thhintot
 	0           "None or not in universe"       
 ;
-label values rhhstk   rhhstk; 
-label define rhhstk  
+label values thhstk   thhstk; 
+label define thhstk  
 	0           "None or not in universe"       
 ;
 label values thhore   thhore; 
@@ -1887,8 +1852,8 @@ label values thhscdbt thhscdbt;
 label define thhscdbt
 	0           "None or not in universe"       
 ;
-label values rhhuscbt rhhuscbt;
-label define rhhuscbt
+label values thhuscbt thhuscbt;
+label define thhuscbt
 	0           "None or not in universe"       
 ;
 label values eaoaunv  eaoaunv;
@@ -3815,949 +3780,9 @@ label define apvdwm
 	2           "Cold deck imputation"          
 	3           "Logical imputation (derivation)"
 ;
-label values epcwunv  epcwunv;
-label define epcwunv 
-	-1          "Not in Universe"               
-	1           "In universe"                   
-;
-label values edaycare edaycare;
-label define edaycare
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values adaycare adaycare;
-label define adaycare
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ecaremth ecaremth;
-label define ecaremth
-	-1          "Not in Universe"               
-;
-label values acaremth acaremth;
-label define acaremth
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ehrscare ehrscare;
-label define ehrscare
-	-1          "Not in Universe"               
-;
-label values ahrscare ahrscare;
-label define ahrscare
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values elivapat elivapat;
-label define elivapat
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values alivapat alivapat;
-label define alivapat
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values enotable enotable;
-label define enotable
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-	3           "Sometimes yes, sometimes no"   
-;
-label values anotable anotable;
-label define anotable
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation"            
-;
-label values epastmon epastmon;
-label define epastmon
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values apastmon apastmon;
-label define apastmon
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eouting  eouting;
-label define eouting 
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values aouting  aouting;
-label define aouting 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values etotread etotread;
-label define etotread
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values atotread atotread;
-label define atotread
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eparread eparread;
-label define eparread
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values aparread aparread;
-label define aparread
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values edadread edadread;
-label define edadread
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values adadread adadread;
-label define adadread
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values etvrules etvrules;
-label define etvrules
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values atvrules atvrules;
-label define atvrules
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values etimestv etimestv;
-label define etimestv
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values atimestv atimestv;
-label define atimestv
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ehoustv  ehoustv;
-label define ehoustv 
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values ahoustv  ahoustv;
-label define ahoustv 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eeatbkf  eeatbkf;
-label define eeatbkf 
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values aeatbkf  aeatbkf;
-label define aeatbkf 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eeatdinn eeatdinn;
-label define eeatdinn
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values aeatdinn aeatdinn;
-label define aeatdinn
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values edadbrkf edadbrkf;
-label define edadbrkf
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values adadbrkf adadbrkf;
-label define adadbrkf
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values edaddinn edaddinn;
-label define edaddinn
-	-1          "Not in Universe"               
-	0           "None"                          
-;
-label values adaddinn adaddinn;
-label define adaddinn
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values efuntime efuntime;
-label define efuntime
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "About once a week (or less)"   
-	3           "A few times a week"            
-	4           "One or two times a day"        
-	5           "Many times each day"           
-;
-label values afuntime afuntime;
-label define afuntime
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values edadfun  edadfun;
-label define edadfun 
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "About once a week (or less)"   
-	3           "A few times a week"            
-	4           "One or two times a day"        
-	5           "Many times each day"           
-;
-label values adadfun  adadfun;
-label define adadfun 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values epraise  epraise;
-label define epraise 
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "About once a week (or less)"   
-	3           "A few times a week"            
-	4           "One or two times a day"        
-	5           "Many times each day"           
-;
-label values apraise  apraise;
-label define apraise 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values edadprai edadprai;
-label define edadprai
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "About once a week (or less)"   
-	3           "A few times a week"            
-	4           "One or two times a day"        
-	5           "Many times each day"           
-;
-label values adadprai adadprai;
-label define adadprai
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values efarscho efarscho;
-label define efarscho
-	-1          "Not in Universe"               
-	1           "Leave school before graduation"
-	2           "Graduate from high school"     
-	3           "Get some college or other training"
-	4           "Graduate from college"         
-	5           "Take further education or"     
-;
-label values afarscho afarscho;
-label define afarscho
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values edadfar  edadfar;
-label define edadfar 
-	-1          "Not in Universe"               
-	1           "Leave school before graduation"
-	2           "Graduate from high school"     
-	3           "Get some college or other training"
-	4           "Graduate from college"         
-	5           "Take further education or"     
-;
-label values adadfar  adadfar;
-label define adadfar 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ethinksc ethinksc;
-label define ethinksc
-	-1          "Not in Universe"               
-	1           "Leave school before graduation"
-	2           "Graduate from high school"     
-	3           "Get some college or other training"
-	4           "Graduate from college"         
-	5           "Take further education or"     
-;
-label values athinksc athinksc;
-label define athinksc
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eatkindg eatkindg;
-label define eatkindg
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values aatkindg aatkindg;
-label define aatkindg
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ekindage ekindage;
-label define ekindage
-	-1          "Not in Universe"               
-;
-label values akindage akindage;
-label define akindage
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values efirgrad efirgrad;
-label define efirgrad
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values afirgrad afirgrad;
-label define afirgrad
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values estrtage estrtage;
-label define estrtage
-	-1          "Not in Universe"               
-;
-label values astrtage astrtage;
-label define astrtage
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ekindele ekindele;
-label define ekindele
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values akindele akindele;
-label define akindele
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ehighgra ehighgra;
-label define ehighgra
-	-1          "Not in Universe"               
-	0           "None (No Grade completed)"     
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-	14          "College, one year or more"     
-;
-label values ahighgra ahighgra;
-label define ahighgra
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ecurrerl ecurrerl;
-label define ecurrerl
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values acurrerl acurrerl;
-label define acurrerl
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values egrdeatt egrdeatt;
-label define egrdeatt
-	-1          "Not in Universe"               
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-	14          "College, one year or more"     
-;
-label values agrdeatt agrdeatt;
-label define agrdeatt
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values epubpriv epubpriv;
-label define epubpriv
-	-1          "Not in Universe"               
-	1           "Public"                        
-	2           "Private"                       
-;
-label values apubpriv apubpriv;
-label define apubpriv
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eassschl eassschl;
-label define eassschl
-	-1          "Not in Universe"               
-	1           "Assigned"                      
-	2           "Chosen"                        
-	3           "Both -- assigned school is school"
-;
-label values aassschl aassschl;
-label define aassschl
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values erelisch erelisch;
-label define erelisch
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values arelisch arelisch;
-label define arelisch
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values especsch especsch;
-label define especsch
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values aspecsch aspecsch;
-label define aspecsch
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values esportea esportea;
-label define esportea
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values asportea asportea;
-label define asportea
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values elessons elessons;
-label define elessons
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values alessons alessons;
-label define alessons
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eclubsch eclubsch;
-label define eclubsch
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values aclubsch aclubsch;
-label define aclubsch
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values erelig   erelig; 
-label define erelig  
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "Several times a year"          
-	3           "About once a month"            
-	4           "About once a week"             
-	5           "Everyday or almost everyday"   
-;
-label values arelig   arelig; 
-label define arelig  
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values elikesch elikesch;
-label define elikesch
-	-1          "Not in Universe"               
-	1           "Not true"                      
-	2           "Sometimes true"                
-	3           "Often true"                    
-;
-label values alikesch alikesch;
-label define alikesch
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eintschl eintschl;
-label define eintschl
-	-1          "Not in Universe"               
-	1           "Not true"                      
-	2           "Sometimes true"                
-	3           "Often true"                    
-;
-label values aintschl aintschl;
-label define aintschl
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ewkshard ewkshard;
-label define ewkshard
-	-1          "Not in Universe"               
-	1           "Not true"                      
-	2           "Sometimes true"                
-	3           "Often true"                    
-;
-label values awkshard awkshard;
-label define awkshard
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values echgschl echgschl;
-label define echgschl
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values achgschl achgschl;
-label define achgschl
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values etimchan etimchan;
-label define etimchan
-	-1          "Not in Universe"               
-;
-label values atimchan atimchan;
-label define atimchan
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values erepgrad erepgrad;
-label define erepgrad
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values arepgrad arepgrad;
-label define arepgrad
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values egrdrpt1 egrdrptd;
-label define egrdrptd
-	-1          "Not in Universe"               
-	0           "None"                          
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-;
-label values egrdrpt2 egrdrptk;
-label define egrdrptk
-	-1          "Not in Universe"               
-	0           "None"                          
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-;
-label values egrdrpt3 egrdrptl;
-label define egrdrptl
-	-1          "Not in Universe"               
-	0           "None"                          
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-;
-label values egrdrpt4 egrdrptm;
-label define egrdrptm
-	-1          "Not in Universe"               
-	0           "None"                          
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-;
-label values egrdrpt5 egrdrptn;
-label define egrdrptn
-	-1          "Not in Universe"               
-	0           "None"                          
-	1           "Kindergarten"                  
-	2           "First grade"                   
-	3           "Second grade"                  
-	4           "Third grade"                   
-	5           "Fourth grade"                  
-	6           "Fifth grade"                   
-	7           "Sixth grade"                   
-	8           "Seventh grade"                 
-	9           "Eighth grade"                  
-	10          "Ninth grade"                   
-	11          "Tenth grade"                   
-	12          "Eleventh grade"                
-	13          "Twelfth grade"                 
-;
-label values agrdrpt  agrdrpt;
-label define agrdrpt 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eexpschl eexpschl;
-label define eexpschl
-	-1          "Not in Universe"               
-	1           "Yes"                           
-	2           "No"                            
-;
-label values aexpschl aexpschl;
-label define aexpschl
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ttimexp  ttimexp;
-label define ttimexp 
-	-1          "Not in Universe"               
-	1           "One time"                      
-	2           "Two Times"                     
-	3           "Three times"                   
-	4           "Four times"                    
-	5           "Five times"                    
-	6           "Six or more times"             
-;
-label values atimexp  atimexp;
-label define atimexp 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ehardcar ehardcar;
-label define ehardcar
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "Sometimes"                     
-	3           "Often"                         
-	4           "Very often"                    
-;
-label values ahardcar ahardcar;
-label define ahardcar
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ebother  ebother;
-label define ebother 
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "Sometimes"                     
-	3           "Often"                         
-	4           "Very often"                    
-;
-label values abother  abother;
-label define abother 
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values egivuplf egivuplf;
-label define egivuplf
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "Sometimes"                     
-	3           "Often"                         
-	4           "Very often"                    
-;
-label values agivuplf agivuplf;
-label define agivuplf
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values eangrycl eangrycl;
-label define eangrycl
-	-1          "Not in Universe"               
-	1           "Never"                         
-	2           "Sometimes"                     
-	3           "Often"                         
-	4           "Very often"                    
-;
-label values aangrycl aangrycl;
-label define aangrycl
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ehelpech ehelpech;
-label define ehelpech
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values ahelpech ahelpech;
-label define ahelpech
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ewatchot ewatchot;
-label define ewatchot
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values awatchot awatchot;
-label define awatchot
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ecounton ecounton;
-label define ecounton
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values acounton acounton;
-label define acounton
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ebadpeop ebadpeop;
-label define ebadpeop
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values abadpeop abadpeop;
-label define abadpeop
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values etrustpe etrustpe;
-label define etrustpe
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values atrustpe atrustpe;
-label define atrustpe
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values ekeepins ekeepins;
-label define ekeepins
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values akeepins akeepins;
-label define akeepins
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
-label values esafepla esafepla;
-label define esafepla
-	-1          "Not in Universe"               
-	1           "Strongly agree"                
-	2           "Agree"                         
-	3           "Disagree"                      
-	4           "Strongly Disagree"             
-	5           "Have no opinion"               
-;
-label values asafepla asafepla;
-label define asafepla
-	0           "Not imputed"                   
-	1           "Statistical imputation (hot deck)"
-	2           "Cold deck imputation"          
-	3           "Logical imputation (derivation)"
-;
 
 #delimit cr
 desc,short
-
-sort ssuid shhadid eentaid epppnum swave srotaton
 
 ****************************************************************
 *to make consistent with CEPR files:
@@ -4774,16 +3799,15 @@ rename swave wave
 rename srotaton rot
 sort id rot wave
 
-keep id rot wave ssuid eentaid epppnum estimuse enotable thomeamt thh* tal* rhh* tmhpr
+keep id rot wave ssuid eentaid epppnum   thomeamt thh* tal*  tmhpr
 replace thhdebt  = thhdebt  + tmhpr
 replace thhscdbt = thhscdbt + tmhpr
-// note: should be the case thhdebt = thhscdbt + rhhuscbt? 
-rename rhhuscbt thhuscbt
-saveold "${save_dir}sippp08putm4.dta", replace
+// note: should be the case thhdebt = thhscdbt + thhuscbt? 
+
+saveold "${save_dir}sippp08putm7.dta", replace
 
 
-
-** Copyright 2011 shared by the National Bureau of Economic Research and Jean Roth ;
+** Copyright 2012 shared by the National Bureau of Economic Research and Jean Roth ;
 
 ** National Bureau of Economic Research. ;
 ** 1050 Massachusetts Avenue ;

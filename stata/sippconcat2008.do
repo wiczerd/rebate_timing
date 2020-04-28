@@ -75,6 +75,7 @@ merge m:1 id wave using ${TMdat_dir}/sippp08putm1.dta , gen(_merge_tm1)
 merge m:1 id wave using ${TMdat_dir}/sippp08putm2.dta , gen(_merge_tm2) update
 merge m:1 id wave using ${TMdat_dir}/sippp08putm4.dta , gen(_merge_tm4) update
 merge m:1 id wave using ${TMdat_dir}/sippp08putm6.dta , gen(_merge_tm6) update
+merge m:1 id wave using ${TMdat_dir}/sippp08putm7.dta , gen(_merge_tm7) update
 merge m:1 id wave using ${TMdat_dir}/sippp08putm9.dta , gen(_merge_tm9) update
 
 drop if date>=.
@@ -141,6 +142,7 @@ gen displaced_layoff = ersend==1
 gen displaced_empclosed = ersend==9 | ersend==10
 gen displaced_slackbiz = ersend==13
 gen displaced = (displaced_layoff | displaced_empclosed | displaced_slackbiz) // <- we might need to take max over the wave for this... I don't recall if its monthly report or wave-based
+
 
 compress
 label data "MPC SIPP08 dataset" 
