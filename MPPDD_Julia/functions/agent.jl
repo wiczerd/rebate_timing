@@ -41,7 +41,7 @@ end
 """
 Define the ϕ function
 """
-@inline function ϕ(s::Float64, ϕ_1_1::Float64,ϕ_1_2::Float64)
+@inline function ϕ(s::Float64, ϕ_1 ::Float64,ϕ_2::Float64)
     return ϕ_1 *(1 -  exp(-ϕ_2*(s-1)))/(1-exp(ϕ_2))
 end
 
@@ -91,11 +91,11 @@ end
 """
 Find s* by maximizing the interpolated v*(s),
 """
-@inline function maxd(d_grid::Array{Float64,1}, vstard::Array{Float64,1},)
-    # maxd = lambda dhr : -1.0*np.interp( np.subtract(np.ones(N_delinq), self.d_grid), vstard, dhr)
+@inline function maxs(s_grid::Array{Float64,1}, vstars::Array{Float64,1},)
+    # maxd = lambda dhr : -1.0*np.interp( np.subtract(np.ones(N_delinq), self.s_grid), vstard, dhr)
     # sopt, vopt  = opt.minimize(maxd, brack=(0, 1))
-    #itp = LinearInterpolation(ones(N_delinq)-d_grid, vstard; extrapolation_bc=Throw());
-    itp = LinearInterpolation(d_grid, vstard; extrapolation_bc=Throw());
+    #itp = LinearInterpolation(ones(N_delinq)-s_grid, vstard; extrapolation_bc=Throw());
+    itp = LinearInterpolation(s_grid, vstars; extrapolation_bc=Throw());
     res = optimize(s-> -1*itp(s), 0, 1); # default routine is Brent's Method
     return Optim.minimizer(res), -1*Optim.minimum(res)
 end
@@ -105,8 +105,8 @@ Taking Q as given, solve for V,B,C,S,K
 """
 function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
     γ::Int64, ϕ_1::Float64, ϕ_2::Float64, r::Float64, ε_probs::Array{Float64,2},
-    z_probs::Array{Float64,3}, income_grid::Array{Float64,3}, d_grid::Array{Float64,1},
-    asset_grid::Array{Float64,2}, T::Int64, N_k::Int64, N_d::Int64, N_z::Int64, N_ε::Int64,
+    z_probs::Array{Float64,3}, income_grid::Array{Float64,3}, s_grid::Array{Float64,1},
+    asset_grid::Array{Float64,2}, T::Int64, N_k::Int64, N_s::Int64, N_z::Int64, N_ε::Int64,
     cbar::Float64, Q::Array{Float64,3})
 
     V = zeros(T+1, N_k, N_ε, N_z);
@@ -115,7 +115,7 @@ function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
     B = zeros(T, N_k, N_ε, N_z);
     Ap= zeros(T, N_k, N_ε, N_z);
 
-    for t =  (T-1):(-1):1
+    for t =  T:(-1):1
 
         # a' grid
         at  = asset_grid[t + 1, :];
@@ -130,6 +130,7 @@ function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
 
         #for i = 1:N_z
         @inbounds Threads.@threads for yidx = 1:(N_z*N_ε)
+        #for yidx = 1:(N_z*N_ε)
             j = floor(Int,mod(yidx-1,N_z*N_ε)/N_z )+1
             i =           mod(yidx-1,N_z)+1
 
@@ -142,8 +143,8 @@ function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
 
                 @inbounds for k = 1:N_k #loop over a0
 
-                    bstard = zeros(N_d);
-                    vstard = zeros(N_d);
+                    bstars = zeros(N_s);
+                    vstars = zeros(N_s);
 
                     # Right before certain death, the agent chooses to consume all that they can
                     if t == T
@@ -151,7 +152,7 @@ function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
                         B[t, k, j, i] = 0.0;
                         C[t, k, j, i] = a0[k] + y + reb;
                         V[t, k, j, i] = u(C[t, k, j, i], γ);
-                        Ap[t, k, j, i] = 0;
+                        Ap[t, k, j, i] = 0.0;
                         continue
                     end
 
@@ -159,7 +160,7 @@ function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
                     EV_grid = [dot(V[t + 1, ik, :, :], tmat) for ik = 1:N_k];
 
                     if a0[k] >= 0 || t>=(T-1)
-                        srange_a0 = N_s
+                        srange_a0 = N_s;
                     else
                         srange_a0 = 1;
                     end
@@ -174,17 +175,17 @@ function backwardSolve(rebate::Float64, t_rebate::Int64, β::Float64,
                         # c = y + a0[k]*s - bmin /(1.0 + r);  # check this is positve?
 
                         # Note: EV interpolation should take place over assets_{t+1} grid
-                        bstard[si]  = max_objective(s, y, qhr, at, a0[k], EV_grid, ψ, β, ϕ_1 , ϕ_2, γ, bmin, bmax);
-                        vstard[si]  = objective(bstard[si], s, y, qhr, at, a0[k], EV_grid, ψ, β, ϕ_1, ϕ_2, γ);
+                        bstars[si]  = max_objective(s, y, qhr, at, a0[k], EV_grid, ψ, β, ϕ_1 , ϕ_2, γ, bmin, bmax);
+                        vstars[si]  = objective(bstars[si], s, y, qhr, at, a0[k], EV_grid, ψ, β, ϕ_1, ϕ_2, γ);
                     end
                     if a0[k] >= 0 || t>=(T-1)
-                        vopt          = vstard[N_d]
-                        sopt          = d_grid[N_d]
-                        bopt          = bstard[N_d];
+                        vopt          = vstars[N_s];
+                        sopt          = s_grid[N_s];
+                        bopt          = bstars[N_s];
                     else
                         #println("bstar: $bstard vstar: $vstard")
-                        sopt, vopt    = maxd(d_grid, vstard)
-                        bopt          = LinearInterpolation(s_grid, bstard)(sopt);
+                        sopt, vopt    = maxs(s_grid, vstars)
+                        bopt          = LinearInterpolation(s_grid, bstars)(sopt);
                     end
 
                     S[t, k, j, i] = sopt;
