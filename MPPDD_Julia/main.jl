@@ -7,10 +7,10 @@
 #include("import.jl") # uncomment to add required packages
 
 using LinearAlgebra
-using SparseArrays
+using SparseArrays, ParSpMatVec
 using Arpack
-using Interpolations
-using Distributions
+using SchumakerSpline, Interpolations
+using Distributions, Random
 using Optim
 using JLD
 using Plots
@@ -22,64 +22,6 @@ cd("/home/david/workspace/rebate_timing/MPPDD_Julia/")
 #cd("/Users/rcedxm19/Dropbox/MPPDD/codes/MPPDD_Julia")
 
 saveroot = "/home/david/workspace/rebate_timing/MPPDD_Julia/"
-
-include("functions/incomeProcess.jl")
-include("functions/agent.jl")
-
-qtol         = 1e-5; # tolerance for convergence in Q
-maxiterq     = 80;   # how many iterations?
-updq         = 0.5;  #speed to update the price function
-
-## Parameters
-freq         = 1; # 1=annual, 4=quarterly
-r            = (1 + 0.03)^(1/freq) - 1;
-β            = 0.95^(1/freq);
-γ            = 1;
-ϕ_1          = 0.5; #random, update this
-ϕ_2          = 1.5; #random, update this
-
-## Agents begin at  age 25, die at 95, retire at 65
-t0           = 25; #25;
-T            = 95; #95;
-T_retire     = 65; #65;
-
-"""
-Convert from years to index
-"""
-function convertt(tin::Int64, freq::Int64, t0::Int64)
-        return tout = (tin - t0)*freq + 1
-end
-
-T 	         = convertt(T, freq,t0);
-T_retire     = convertt(T_retire, freq,t0);
-
-rebate       = 0.0;  # added to BC at t_reb (argument in backwardSolve)
-cbar         = 0.0;  # consumption floor
-
-# Survival Probabilities
-survivalprobs = ones(T); # T set to 0 in agent.jl
-
-## State space
-
-N_k          = 50;      # Number of asset states, 40-50
-N_z          = 7;      # Number of permanent income states, 7-10
-N_ε          = 5;	    # Number of transitory income states, 5-21
-N_s          = 25;      # Number of delinquency grid points, 10-5
-
-## Income Process  - from Kaplan & Violante (2010)
-ρ	      =  1.0;
-σ_η       = (0.01/freq)^(1/2);  # Variance of permanent income shocks = 0.01
-σ_z0      = (0.15/freq)^(1/2);  # Variance of permanent income shocks = 0.15
-σ_ε       = (0.05/freq)^(1/2);  # Variance of transitory income shocks = 0.05
-
-
-T_peak 	  = 21*freq; # of working years at which the experience profile peaks
-
-Ygrid, Zgrid, εgrid = get_Ygrid(T_retire, T_peak, T, N_z, N_ε, σ_ε, σ_z0, σ_η, ρ); # level grids of income
-
-zprobs    = get_zprobs(T, N_z, σ_z0, σ_η, ρ); # transition matrices for permanent income
-εprobs    = get_εprobs(T, N_ε, σ_ε);          # transition matrices for transitory income
-
 
 mutable struct sol
     V::Array{Float64,4}    # defined for (T+1,N_k,N_ε, N_z)
@@ -102,54 +44,149 @@ mutable struct model
     Ygrid::Array{Float64,3}
     asset_grid::Array{Float64,2}
     cbar::Float64
-    N_k::Int64
-    N_s::Int64
-    N_z::Int64
-    N_ε::Int64
-
+    β::Float64
+    γ::Int64
+    ϕ_1::Float64
+    ϕ_2::Float64
+        
+    rebate:: Float64 # added to BC at t_reb (argument in backwardSolve)
+    t_rebate::Int64
     model() = new()
 end
 
+mutable struct hists
+    #histories for:
+    chist::Array{Float64,2}
+    bhist::Array{Float64,2}
+    shist::Array{Float64,2}
+    ahist::Array{Float64,2}
+    #should be drawn once:
+    εidxhist::Array{Int64,2}
+    zidxhist::Array{Int64,2}
+    agehist::Array{Int64,2}
+    
+    a0qtlhist::Array{Float64,1} #quantile of a in the asset distribution for first period.
 
-
-## Asset and repayment grid
-
-asset_grid = assetGrid(T, Ygrid, N_k, r);
-s_grid     = collect(LinRange(0, 1, N_s));
-
-## Solve model
-
-t_reb    = 32; # actual age that agent receives rebate (between 20 and 82)
-t_rebate = convertt(t_reb, freq,t0); # index
-
-
-Q0 = ones((T,N_z,N_k)).*(1/(1+r));
-for t=1:T
-    #a0 = sum( asset_grid[t,:].<0.0 )+1
-    for i = 1:N_z
-        for api=1:N_k
-            Q0[t, i, api] = asset_grid[t,api]<0.0 ? exp(asset_grid[t,api]) / (1.0 + r) : 1.0 / (1.0 + r);
-        end
-    end
+    hists() = new()
 end
 
+include("functions/incomeProcess.jl")
+include("functions/agent.jl")
 
-# some comparative statics, solving it several times over phi parameters:
-ϕ_2grid = [1.1 1.5 5.0]
-for phi2idx in 1:length(ϕ_2grid)
+const qtol         = 1e-5; # tolerance for convergence in Q
+const maxiterq     = 40;   # how many iterations?
 
-    ϕ_2 = ϕ_2grid[phi2idx];
+## Parameters
+const freq         = 1; # 1=annual, 4=quarterly
+const r            = (1 + 0.05)^(1/freq) - 1;
+const β            = 0.925^(1/freq);
+const γ            = 1;
+
+
+## State space
+
+const N_k          = 200;      # Number of asset states, 40-50
+const N_z          = 7;      # Number of permanent income states, 7-10
+const N_ε          = 5;	    # Number of transitory income states, 5-21
+const N_s          = 15;      # Number of delinquency grid points, 10-5
+
+## Income Process  - from Kaplan & Violante (2010)
+ρ	      =  1.0;
+σ_η       = (0.01/freq)^(1/2);  # Variance of permanent income shocks = 0.01
+σ_z0      = (0.15/freq)^(1/2);  # Variance of permanent income shocks = 0.15
+σ_ε       = (0.05/freq)^(1/2);  # Variance of transitory income shocks = 0.05
+
+## Simulation:
+const Nsim      = 500000; #number of Agents
+const Tsim      = 10;    #number of periods in the simulation
+const Tburnin   = 20;    #number of burnin periods
+
+## Ages:
+const T = 71;        #corresponds to 95
+const T_retire = 41; #corresponds to 65
+const t0 = 25; 
+## Agents begin at  age 25, die at 95, retire at 65
+
+# Survival Probabilities
+const survivalprobs = ones(T); # T set to 0 in agent.jl
+
+
+const ϕ_2grid = [1.5];
+
+
+## Solve model
+function solveQ_ϕ2!(mod::model)
+    
+    updq = 0.25;  #speed to update the price function
+    
+    ## Initialize asset and repayment grid
+    asset_max  = zeros(T+1);
+    asset_min  = zeros(T+1);
+    mod.asset_grid = zeros(T+1, N_k);
+     # Minimum assets (Maximum debt)
+    for t = (T-1):-1:2
+        income_min   = minimum(mod.Ygrid[t,:,:]);
+        asset_min[t] = asset_min[t+1]/(1.0+r) - income_min+ 1e-4;
+    end
+
+    for t = 1:T
+        income_max     = maximum(mod.Ygrid[t,:,:]);
+        asset_max[t+1] = min(asset_max[t] + 0.95*income_max, 100)
+    end
+    for t = 1:T
+        mod.asset_grid[t, :] = LinRange(asset_min[t],asset_max[t],N_k);
+    end
+
+
+    ## Initialize Q0
+    Q0 = ones((T,N_z,N_k)).*(1/(1+r));
+    for t=1:T
+        #a0 = sum( asset_grid[t,:].<0.0 )+1
+        for i = 1:N_z
+            for api=1:N_k
+                Q0[t, i, api] = mod.asset_grid[t,api]<0.0 ? exp(.1*mod.asset_grid[t,api]) / (1.0 + r) : 1.0 / (1.0 + r);
+            end
+        end
+    end
+
+
+    ϕ_2 = mod.ϕ_2
+    println("Starting to compute eqm for ϕ_2 = $ϕ_2")
+    println("")
+
+    #++++++++++++++++++++++++++++++++++++++++++
+    #allocating stuff:
+    ms = sol();
+    ms.V = zeros(T+1,N_k,N_ε, N_z);
+    ms.C = zeros(T,N_k,N_ε, N_z);
+    ms.S = zeros(T,N_k,N_ε, N_z);
+    ms.B = zeros(T,N_k,N_ε, N_z);
+    ms.Ap = zeros(T,N_k,N_ε, N_z);
+
+
+    ht = hists();
+    ht.a0qtlhist = zeros(Nsim);
+    ht.zidxhist  = Array{Int64,2}(undef, Nsim, Tsim + Tburnin);
+    ht.εidxhist  = Array{Int64,2}(undef, Nsim, Tsim + Tburnin);
+    ht.ahist     = zeros(Nsim,Tsim + Tburnin);
+    ht.shist     = zeros(Nsim,Tsim + Tburnin);
+    ht.chist     = zeros(Nsim,Tsim + Tburnin);
+    ht.bhist     = zeros(Nsim,Tsim + Tburnin);
+    ht.agehist   = Array{Int64,2}(undef, Nsim, Tsim + Tburnin);
 
     
 
-    println("Starting to compute eqm for ϕ_2 = $ϕ_2")
-
-    #use last Q as a guess or go back to our initial one?
+    #= use last Q as a guess or go back to our initial one?
     for qiter = 1:maxiterq
-        @time V, B, C, S, Ap = backwardSolve(rebate, t_rebate, β, γ, ϕ_1, ϕ_2, r,
-            εprobs, zprobs, Ygrid, s_grid, asset_grid, T, N_k, N_s, N_z, N_ε, cbar,Q0);
+        
+        ## Asset and repayment grid : note, this depends on Q
+        mod.asset_grid = assetGrid(T, mod.Ygrid, N_k, Q0, mod.asset_grid);
+        mina = minimum(mod.asset_grid);
+        println("Most possible borrowing: $mina")
 
-        Q = equilibriumQ(Q0, S, Ap, asset_grid, r, εprobs, zprobs);
+        @time backwardSolve!(ms,mod, T, N_k, N_z, N_ε,Q0);
+
+        Q = equilibriumQ(Q0, ms.S, ms.Ap, mod.asset_grid, r, mod.εprobs, mod.zprobs);
         Qdist = maximum( abs.(Q.-Q0) );
         println("sup norm of distance is $Qdist")
 
@@ -161,9 +198,9 @@ for phi2idx in 1:length(ϕ_2grid)
             for k=1:N_k
                 for εi =1:N_ε
                     for zi =1:N_z
-                        sinterior = S[t, k, εi, zi]< 0.99 && S[t, k, εi, zi]> 0.01 ? sinterior + 1 : sinterior
-                        sbad0     = S[t, k, εi, zi]< 0.99 && asset_grid[t, k]>0.0 ? sbad0 + 1     : sbad0
-                        sbad0T    = S[t, k, εi, zi]< 0.99 && asset_grid[t, k]>0.0 && t< T-1 ? sbad0T + 1     : sbad0T
+                        sinterior = ms.S[t, k, εi, zi]< 0.99 && ms.S[t, k, εi, zi]> 0.01 ? sinterior + 1 : sinterior
+                        sbad0     = ms.S[t, k, εi, zi]< 0.99 && mod.asset_grid[t, k]>0.0 ? sbad0 + 1     : sbad0
+                        sbad0T    = ms.S[t, k, εi, zi]< 0.99 && mod.asset_grid[t, k]>0.0 && t< T-1 ? sbad0T + 1     : sbad0T
                     end
                 end
             end
@@ -183,91 +220,207 @@ for phi2idx in 1:length(ϕ_2grid)
         if Qdist < qtol
             break;
         end
+        #if Qdist > .5
+        #    updq = .1;
+        #end 
+
     end
 
 
-    saveloc = string("/home/david/workspace/rebate_timing/MPPDD_Julia/","MPPDD_eqmQ_",ϕ_2,".jld")
+    saveloc = string(saveroot,"MPPDD_eqmQ_",ϕ_2,".jld")
     @save saveloc Q0
-    #saveloc = string(saveroot,"MPPDD_solMats_",ϕ_2,".jld")
-    #@save saveloc msol
+
+    ms.Aεz_dist = zeros(T, N_k, N_ε, N_z);
+    #steadystateDist!( ms, mod,survivalprobs, T, N_k, N_z, N_ε)
+
+    saveloc = string(saveroot,"MPPDD_solMats_",ϕ_2,".jld")
+    @save saveloc ms
+    =#
+    #ϕ_2 = 1.5;
+    saveloc = string(saveroot,"MPPDD_eqmQ_",ϕ_2,".jld")
+    @load saveloc Q0
+    saveloc = string(saveroot,"MPPDD_solMats_",ϕ_2,".jld")
+    @load saveloc ms
+    
+
+    println("Drawing shocks!");
+    draw_shocks!(ht,mod, 12281951);
+    println("Simulating!");
+    sim_hists!(ht, ms, mod, T, N_k,N_z, N_ε);
+    saveloc = string(saveroot,"MPPDD_simHists_",ϕ_2,".jld")
+    @save saveloc ht
 
 end
 
+function setparam_sol()
+
+    # some comparative statics, solving it several times over phi parameters:
+
+    for phi2idx in 1:length(ϕ_2grid)
+        
+        
+        T_peak 	  = 21*freq; # of working years at which the experience profile peaks
+
+        mod = model();
+        
+        mod.t_rebate = 32 - 25+1; # agent receives rebate at 32 (between 20 and 82)
+        mod.rebate = 0.0
+        mod.Ygrid, mod.zgrid, mod.εgrid = get_Ygrid(T_retire, T_peak, T, N_z, N_ε, σ_ε, σ_z0, σ_η, ρ); # level grids of income
+
+        mod.zprobs    = get_zprobs(T, N_z, σ_z0, σ_η, ρ); # transition matrices for permanent income
+        mod.εprobs    = get_εprobs(T, N_ε, σ_ε);          # transition matrices for transitory income
+
+        mod.ϕ_1 = 0.5; #random, update this
+        mod.ϕ_2 = ϕ_2grid[phi2idx];
+
+        solveQ_ϕ2!(mod)
+        saveloc = string(saveroot,"MPPDD_modEnvr_",mod.ϕ_2,".jld")
+        @save saveloc mod
+
+    end
+end
+
+
+setparam_sol();
 #+++++++++++++++++++++++++++++++++
 ## diagnostic plots:
-#+++++++++++++++++++++++++++++++
+#=++++++++++++++++++++++++++++++
 
-ϕ_2grid = [1.1 1.5 5.0]
-for phi2idx = 1:3
+for phi2idx = 1:length(ϕ_2grid)
     ϕ_2 = ϕ_2grid[phi2idx]
 
     saveloc = string(saveroot,"MPPDD_eqmQ_",ϕ_2,".jld")
     @load saveloc Q0
-#    saveloc = string(saveroot,"MPPDD_solMats_",ϕ_2,".jld")
-#    @load saveloc V B C S Ap
+    saveloc = string(saveroot,"MPPDD_solMats_",ϕ_2,".jld")
+    @load saveloc ms
+    saveloc = string(saveroot,"MPPDD_modEnvr_",ϕ_2,".jld")
+    @load saveloc mod
+    saveloc = string(saveroot,"MPPDD_simHists_",ϕ_2,".jld")
+    @load saveloc ht
 
-    @time V, B, C, S, Ap = backwardSolve(rebate, t_rebate, β, γ, ϕ_1, ϕ_2, r,
-        εprobs, zprobs, Ygrid, s_grid, asset_grid, T, N_k, N_s, N_z, N_ε, cbar,Q0);
-
-    Aεz_dist = zeros(T, N_k, N_ε, N_z);
-    steadystateDist!( Aεz_dist, Ap, survivalprobs, T, N_k, N_s, N_z, N_ε, asset_grid, εprobs, zprobs)
-    saveloc = string(saveroot,"MPPDD_eqmDist_",ϕ_2,".jld")
-    @save saveloc Aεz_dist
-    
     for zi=1:N_z
-zi=4
+                
         Qages = hcat( Q0[1,zi,:],Q0[15,zi,:],Q0[25,zi,:], Q0[35,zi,:] )
-        plot(hcat(asset_grid[2,:],asset_grid[16,:],asset_grid[26,:],asset_grid[36,:]),Qages,title = "Debt price schedule", ylabel="Equilibrium debt price", xlabel = "a'",
+        plot!(hcat(mod.asset_grid[2,:],mod.asset_grid[16,:],mod.asset_grid[26,:],mod.asset_grid[36,:]),Qages,title = "Debt price schedule", ylabel="Equilibrium debt price", xlabel = "a'",
             label=["Age 1" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
         savefig(string("Q_ages_phi",ϕ_2,"_zi",zi,".png"))
 
-        N_k_neg = sum(asset_grid[2,:].<0)
+        N_k_neg = sum(mod.asset_grid[2,:].<0)
         Qassets = zeros(T_retire-1, N_k_neg)
         for ai=1:N_k_neg
             for t=2:T_retire
-                natborrowing = minimum(asset_grid[t,:]);
-                if asset_grid[2,ai] > natborrowing
-                    Qassets[t-1,ai] = LinearInterpolation(asset_grid[t,:], Q0[t-1,zi,:])(asset_grid[2,ai]);
+                natborrowing = minimum(mod.asset_grid[t,:]);
+                if mod.asset_grid[2,ai] > natborrowing
+                    Qassets[t-1,ai] = LinearInterpolation(mod.asset_grid[t,:], Q0[t-1,zi,:])(mod.asset_grid[2,ai]);
                 else
                     Qassets[t-1,ai] = NaN
                 end
             end
         end
-        labs = round.(asset_grid[2,1:N_k_neg]*10.0)/10.0
-        plot(1:(T_retire-1),Qassets,title = "Price as a function of age", ylabel="Equilibrium debt price", xlabel = "Age",
+        labs = round.(mod.asset_grid[2,1:N_k_neg]*10.0)/10.0
+        plot!(1:(T_retire-1),Qassets,title = "Price as a function of age", ylabel="Equilibrium debt price", xlabel = "Age",
             label= labs', legend=:bottomright, lw=3, size=(1500,600)) #label=["Age 1" "Age 15" "Age 25" "Age 35"],
         savefig(string("Q_assets_phi",ϕ_2,"_zi",zi,".png"))
-
-
+    
+        asset_grid_ages = hcat(mod.asset_grid[2,:],mod.asset_grid[15,:],mod.asset_grid[25,:],mod.asset_grid[35,:]);
         for ei=1:N_ε
+            
+            Vages = hcat( ms.V[2,:,ei,zi],ms.V[15,:,ei,zi],ms.V[25,:,ei,zi], ms.V[35,:,ei,zi] );
+            plot(asset_grid_ages,Vages)
+            plot!(title = "Value Function", ylabel="", xlabel = "a",
+                label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
+            savefig(string("V_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
 
-            Sages = hcat( S[2,:,ei,zi],S[15,:,ei,zi],S[25,:,ei,zi], S[35,:,ei,zi] );
-            plot(hcat(asset_grid[2,:],asset_grid[15,:],asset_grid[25,:],asset_grid[35,:]),Sages,title = "Delinquency policy", ylabel="Optimal s", xlabel = "a",
+            Cages = hcat( ms.C[2,:,ei,zi],ms.C[15,:,ei,zi],ms.C[25,:,ei,zi], ms.C[35,:,ei,zi] );
+            plot(asset_grid_ages,Cages)
+            plot!(title = "Consumption", ylabel="", xlabel = "a",
+                label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
+            savefig(string("C_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
+
+            Sages = hcat( ms.S[2,:,ei,zi],ms.S[15,:,ei,zi],ms.S[25,:,ei,zi], ms.S[35,:,ei,zi] );
+            plot(asset_grid_ages,Sages)
+            plot!(title = "Delinquency policy", ylabel="", xlabel = "a",
                 label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
             savefig(string("S_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
 
-            Apages = hcat( Ap[2,:,ei,zi]-asset_grid[2,:],Ap[15,:,ei,zi]-asset_grid[15,:],Ap[25,:,ei,zi]-asset_grid[25,:], Ap[35,:,ei,zi]-asset_grid[35,:] )
-            plot(hcat(asset_grid[2,:],asset_grid[15,:],asset_grid[25,:],asset_grid[35,:]),Apages,title = "A' policy", ylabel="a'-a", xlabel = "a",
+            Apages = hcat( ms.Ap[2,:,ei,zi]-mod.asset_grid[2,:],ms.Ap[15,:,ei,zi]-mod.asset_grid[15,:],ms.Ap[25,:,ei,zi]-mod.asset_grid[25,:], ms.Ap[35,:,ei,zi]-mod.asset_grid[35,:] );
+            plot(asset_grid_ages,Apages)
+            plot!(title = "A' policy", ylabel="a'-a", xlabel = "a",
                 label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
             savefig(string("Ap_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
-
-            Distages = hcat( Aεz_dist[2,:,ei,zi],Aεz_dist[15,:,ei,zi],Ap[25,:,ei,zi], Aεz_dist[35,:,ei,zi])
-            plot(hcat(asset_grid[2,:],asset_grid[15,:],asset_grid[25,:],asset_grid[35,:]),
-                Distages,title = "Distribution of Assets", ylabel="Density(a)", xlabel = "a",
+            
+            Adistages = hcat( ms.Aεz_dist[2,:,ei,zi],ms.Aεz_dist[15,:,ei,zi],ms.Aεz_dist[25,:,ei,zi], ms.Aεz_dist[35,:,ei,zi] );
+            plot(asset_grid_ages,Adistages)
+            plot!(title = "A distribution", ylabel="Density", xlabel = "a",
                 label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
             savefig(string("Adist_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
+
         end
 
+        
 
         # experiment giving transitory income shock: 
-        Apages = hcat( (Ap[2, :,3,zi]- Ap[2, :,2,zi])./ (Ygrid[2, 3, zi]  - Ygrid[2 , 2, zi]),
-                       (Ap[15,:,3,zi]- Ap[15,:,2,zi])./ (Ygrid[15, 3, zi] - Ygrid[15, 2, zi]),
-                       (Ap[25,:,3,zi]- Ap[25,:,2,zi])./ (Ygrid[25, 3, zi] - Ygrid[25, 2, zi]),
-                       (Ap[35,:,3,zi]- Ap[35,:,2,zi])./ (Ygrid[35, 3, zi] - Ygrid[35, 2, zi]) )
-        epschng = round(εgrid[2,N_ε]/Ygrid[2, 1, zi]*100.0 - εgrid[2,1]/Ygrid[2, 1, zi]*100.0)/100.0
-        plot(hcat(asset_grid[2,:],asset_grid[15,:],asset_grid[25,:],asset_grid[35,:]),Apages,title = "A' change with ε shock of $epschng", ylabel="a' change / ε shock ", xlabel = "a",
+        Apages = hcat((ms.Ap[2, :,3,zi]- ms.Ap[2, :,2,zi])./ (mod.Ygrid[2, 3, zi]  - mod.Ygrid[2 , 2, zi]),
+                      (ms.Ap[15,:,3,zi]- ms.Ap[15,:,2,zi])./ (mod.Ygrid[15, 3, zi] - mod.Ygrid[15, 2, zi]),
+                      (ms.Ap[25,:,3,zi]- ms.Ap[25,:,2,zi])./ (mod.Ygrid[25, 3, zi] - mod.Ygrid[25, 2, zi]),
+                      (ms.Ap[35,:,3,zi]- ms.Ap[35,:,2,zi])./ (mod.Ygrid[35, 3, zi] - mod.Ygrid[35, 2, zi]) )
+        epschng = round(mod.Ygrid[2, 3, zi]*100.0 - mod.Ygrid[2, 2, zi]*100.0)/100.0
+        plot(asset_grid_ages,Apages)
+        plot!(title = "A' change with ε shock of $epschng", ylabel="a' change / ε shock ", xlabel = "a",
             label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
         savefig(string("ApDif_ages_phi",ϕ_2,"_zi",zi,".png"))
+        
+        delQages = zeros(N_k,4 )
+        for ai=1:N_k
+            delQages[ai,1] = (LinearInterpolation(mod.asset_grid[3,:], Q0[2,zi,:])(ms.Ap[2, ai,3,zi]) - LinearInterpolation(mod.asset_grid[3,:], Q0[2,zi,:])(ms.Ap[2, ai,2,zi]))/
+                (ms.Ap[2, ai,3,zi]- ms.Ap[2, ai,2,zi])
+            delQages[ai,2] = (LinearInterpolation(mod.asset_grid[16,:], Q0[15,zi,:])(ms.Ap[15, ai,3,zi]) - LinearInterpolation(mod.asset_grid[16,:], Q0[15,zi,:])(ms.Ap[15, ai,2,zi]))/
+                (ms.Ap[15, ai,3,zi]- ms.Ap[15, ai,2,zi])
+            delQages[ai,3] = (LinearInterpolation(mod.asset_grid[26,:], Q0[25,zi,:])(ms.Ap[25, ai,3,zi]) - LinearInterpolation(mod.asset_grid[26,:], Q0[25,zi,:])(ms.Ap[25, ai,2,zi]))/
+                (ms.Ap[2, ai,3,zi]- ms.Ap[2, ai,2,zi])
+            delQages[ai,4] = (LinearInterpolation(mod.asset_grid[36,:], Q0[35,zi,:])(ms.Ap[35, ai,3,zi]) - LinearInterpolation(mod.asset_grid[36,:], Q0[35,zi,:])(ms.Ap[35, ai,2,zi]))/
+                (ms.Ap[15, ai,3,zi]- ms.Ap[15, ai,2,zi])
+        end
+        epschng = round(mod.Ygrid[2, 3, zi]*100.0 - mod.Ygrid[2, 2, zi]*100.0)/100.0
+        plot(asset_grid_ages,delQages)
+        plot!(title = "dQdA change with ε shock of $epschng", ylabel="q change / ε shock ", xlabel = "a", label=["Age 2" "Age 15" "Age 25" "Age 35"],
+            legend=:bottomright, lw=3, size=(1500,600))
+        savefig(string("QDif_phi",ϕ_2,"_zi",zi,".png"))
+    
+        
 
+        # experiment giving transitory income shock: 
+        Cages = hcat((ms.C[2, :,3,zi]- ms.C[2, :,2,zi])./ (mod.Ygrid[2, 3, zi]  - mod.Ygrid[2 , 2, zi]),
+        (ms.C[15,:,3,zi]- ms.C[15,:,2,zi])./ (mod.Ygrid[15, 3, zi] - mod.Ygrid[15, 2, zi]),
+        (ms.C[25,:,3,zi]- ms.C[25,:,2,zi])./ (mod.Ygrid[25, 3, zi] - mod.Ygrid[25, 2, zi]),
+        (ms.C[35,:,3,zi]- ms.C[35,:,2,zi])./ (mod.Ygrid[35, 3, zi] - mod.Ygrid[35, 2, zi]) )
+        epschng = round(mod.Ygrid[2, 3, zi]*100.0 - mod.Ygrid[2, 2, zi]*100.0)/100.0
+        plot(asset_grid_ages,Cages)
+        plot!(title = "C change with ε shock of $epschng", ylabel="c change / ε shock ", xlabel = "a",
+            label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
+        savefig(string("CDif_ages_phi",ϕ_2,"_zi",zi,".png"))
+        
+        Bages = hcat((ms.B[2, :,3,zi]- ms.B[2, :,2,zi])./ (mod.Ygrid[2, 3, zi]  - mod.Ygrid[2 , 2, zi]),
+        (ms.B[15,:,3,zi]- ms.B[15,:,2,zi])./ (mod.Ygrid[15, 3, zi] - mod.Ygrid[15, 2, zi]),
+        (ms.B[25,:,3,zi]- ms.B[25,:,2,zi])./ (mod.Ygrid[25, 3, zi] - mod.Ygrid[25, 2, zi]),
+        (ms.B[35,:,3,zi]- ms.B[35,:,2,zi])./ (mod.Ygrid[35, 3, zi] - mod.Ygrid[35, 2, zi]) )
+        epschng = round(mod.Ygrid[2, 3, zi]*100.0 - mod.Ygrid[2, 2, zi]*100.0)/100.0
+        plot(asset_grid_ages,Bages)
+        plot!(title = "B change with ε shock of $epschng", ylabel="b change / ε shock ", xlabel = "a",
+            label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
+        savefig(string("BDif_ages_phi",ϕ_2,"_zi",zi,".png"))
+
+        
+        Sages = hcat((ms.S[2, :,3,zi]- ms.S[2, :,2,zi]),
+        (ms.S[15,:,3,zi]- ms.S[15,:,2,zi]),
+        (ms.S[25,:,3,zi]- ms.S[25,:,2,zi]),
+        (ms.S[35,:,3,zi]- ms.S[35,:,2,zi]) )
+        epschng = round(mod.Ygrid[2, 3, zi]*100.0 - mod.Ygrid[2, 2, zi]*100.0)/100.0
+        plot(asset_grid_ages,Sages)
+        plot!(title = "S change with ε shock of $epschng", ylabel="s change / ε shock ", xlabel = "a",
+            label=["Age 2" "Age 15" "Age 25" "Age 35"],legend=:bottomright, lw=3, size=(1500,600))
+        savefig(string("SDif_ages_phi",ϕ_2,"_zi",zi,".png"))
+             
     end
 end
+=#
