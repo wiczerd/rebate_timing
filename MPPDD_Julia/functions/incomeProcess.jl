@@ -1,16 +1,16 @@
 """
 Grid of permanent income
 """
-function get_zgrid(T::Int64, N_z::Int64, σ_z0::Float64, σ_η::Float64, ρ::Float64)
-     zgrid = zeros(T + 2, N_z);
-     σ     = ones(T+1)*σ_z0;
+function get_zgrid(N_ages::Int64, N_z::Int64, σ_z0::Float64, σ_η::Float64, ρ::Float64)
+    zgrid = zeros(N_ages + 2, N_z);
+    σ     = ones(N_ages+1)*σ_z0;
 
-     for t = 1:T
-         zgrid[t,:] = collect(LinRange(-3.5*σ[t], 3.5*σ[t], N_z))
-         σ[t+1]     = (ρ^2)*(σ[t]^2) + σ_η^2
-     end
+    for t = 1:N_ages
+        zgrid[t,:] = collect(LinRange(-3.5*σ[t], 3.5*σ[t], N_z))
+        σ[t+1]     = ((ρ^2)*(σ[t]^2) + σ_η^2)^.5;
+    end
 
-     return zgrid
+    return zgrid
 end
 
 """
@@ -33,38 +33,38 @@ end
 """
 Return deterministic experience profile of log income, common to all households
 """
-function pincome_profile(T_retire::Int64, T_peak::Int64)
-    years_worked = cumsum(ones(T_retire)) .-1;
-    return (2 .- ((years_worked .- T_peak).^2 ./ T_peak^2))
+function pincome_profile(age_retire::Int64, age_peak::Int64)
+    periods_worked = cumsum(ones(age_retire)) .-1;
+    return (2 .- ((periods_worked .- age_peak).^2 ./ age_peak^2))
 end
 
 """
 Return level grid of total income
 """
-function get_Ygrid(T_retire::Int64, T_peak::Int64, T::Int64, N_z::Int64,
+function get_Ygrid(age_retire::Int64, age_peak::Int64, N_ages::Int64, N_z::Int64,
     N_ε::Int64, σ_ε::Float64, σ_z0::Float64, σ_z::Float64, ρ::Float64)
 
     # Log components
-    zgrid        = get_zgrid(T, N_z, σ_z0, σ_η, ρ);
-    κ            = pincome_profile(T_retire, T_peak);
+    zgrid        = get_zgrid(N_ages, N_z, σ_z0, σ_η, ρ);
+    κ            = pincome_profile(age_retire, age_peak);
     ε            = get_εgrid(N_ε, σ_ε);
 
     # Level grids
-    Ygrid        = zeros(T, N_ε, N_z);
-    Zgrid        = zeros(T, N_z);
-    εgrid        = zeros(T, N_ε);
+    Ygrid        = zeros(N_ages, N_ε, N_z);
+    Zgrid        = zeros(N_ages, N_z);
+    εgrid        = zeros(N_ages, N_ε);
 
-    for t = 1:T
-        for i = 1:N_z
-            for j = 1:N_ε
-                if t >= T_retire
-                    Ygrid[t, j, i]    = pension(exp(zgrid[T_retire - 1, i]));
-                    Zgrid[t, i]       = pension(exp(κ[T_retire - 1] + zgrid[T_retire - 1, i]));
-                    εgrid[t, j]       = 1;
+    for t = 1:N_ages
+        for zi = 1:N_z
+            for ei = 1:N_ε
+                if t >= age_retire
+                    Ygrid[t, ei, zi]    = pension(exp(zgrid[age_retire - 1, zi]));
+                    Zgrid[t, zi]       = pension(exp(κ[age_retire - 1] + zgrid[age_retire - 1, zi]));
+                    εgrid[t, ei]       = 1.0;
                 else
-                    Ygrid[t, j, i]    = exp(κ[t] + zgrid[t, i] + ε[j]);
-                    Zgrid[t, i]       = exp(zgrid[t, i]);
-                    εgrid[t, j]       = exp(ε[j]);
+                    Ygrid[t, ei, zi]    = exp(κ[t] + zgrid[t, zi] + ε[ei]);
+                    Zgrid[t, zi]       = exp(zgrid[t, zi]);
+                    εgrid[t, ei]       = exp(ε[ei]);
                 end
             end
         end
@@ -72,10 +72,10 @@ function get_Ygrid(T_retire::Int64, T_peak::Int64, T::Int64, N_z::Int64,
     return Ygrid, Zgrid, εgrid
 end
 
-function get_zprobs(T::Int64, N_z::Int64, σ_z0::Float64, σ_η::Float64, ρ::Float64)
+function get_zprobs(N_ages::Int64, N_z::Int64, σ_z0::Float64, σ_η::Float64, ρ::Float64)
 
-    zgrid        = get_zgrid(T, N_z, σ_z0, σ_η, ρ);
-    tprobs       = zeros(T, N_z, N_z);
+    zgrid        = get_zgrid(N_ages, N_z, σ_z0, σ_η, ρ);
+    tprobs       = zeros(N_ages, N_z, N_z);
 
     function Pr(x)
         d = Normal(0, σ_η)
@@ -83,8 +83,8 @@ function get_zprobs(T::Int64, N_z::Int64, σ_z0::Float64, σ_η::Float64, ρ::Fl
     end
 
     # Get transition matrices over time
-    for t = 1:T
-        if t < T_retire - 1
+    for t = 1:N_ages
+        if t < age_retire - 1
             zp       = zgrid[t + 1,:];
             z0       = zgrid[t,:];
             for j = 1:N_z
@@ -140,13 +140,10 @@ function get_εprobs(T::Int64, N_ε::Int64, σ_ε::Float64)
         end
     end
 
-    #= not necessary
-    tprobs[T_retire - 1, :, idx0] .= 1
-
-    for t = T_retire:T
-        tprobs[t, :, :]    .=  Matrix(1.0I, N_ε, N_ε);
-    end
-    =#
+    # not necessary
+    # tprobs[(age_retire+1) : N_ages, :] .= 0.0
+    # tprobs[(age_retire+1) : N_ages, idx0] .= 1.0
+    
 
     return tprobs
 end
