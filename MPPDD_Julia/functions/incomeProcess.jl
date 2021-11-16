@@ -6,7 +6,7 @@ function get_zgrid(N_ages::Int64, N_z::Int64, σ_z0::Float64, σ_η::Float64, ρ
     σ     = ones(N_ages+1)*σ_z0;
 
     for t = 1:N_ages
-        zgrid[t,:] = collect(LinRange(-3.5*σ[t], 3.5*σ[t], N_z))
+        zgrid[t,:] = collect(LinRange(-2.5*σ[t], 2.5*σ[t], N_z))
         σ[t+1]     = ((ρ^2)*(σ[t]^2) + σ_η^2)^.5;
     end
 
@@ -17,7 +17,7 @@ end
 Grid of log transitory income shock
 """
 function get_εgrid(N_ε::Int64, σ_ε::Float64)
-  return collect(LinRange(-3.5*σ_ε, 3.5*σ_ε, N_ε))
+  return collect(LinRange(-2.5*σ_ε, 2.5*σ_ε, N_ε))
 end
 
 """
