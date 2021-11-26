@@ -66,7 +66,7 @@
         ϕ_1::Float64 #average cost level
         ϕ_2::Float64 # curvature
         ϕ_3::Float64 # fixed costs
-        reclaimrate::Float64
+        reclaimrate::Float64 #h in the model... the fraction not taken by haircut
         r::Float64
         β::Float64
         λ::Float64
@@ -207,7 +207,9 @@
 	const unevengrid = true;
 	const natborrowlimit = true;
 
-    fullcommit = false;
+    constQ = false; #set q = 1/(1+r) or every debt level 
+    fullcommit = false; # do not allow s<1, which also implies constQ
+
 
 
     print("Done defining constants.")
@@ -224,6 +226,7 @@
         mod.ϕ_2  = parval[:ϕ_2];
         mod.ϕ_3  = parval[:ϕ_3];
         mod.λ  = parval[:λ];
+        mod.reclaimrate = parval[:reclaimrate];
 
         mmt = moments();
         age_peak       = (Yrs_retire-10)*freq; # corresponds to 50-55, at which income peaks
@@ -241,20 +244,22 @@
         fullcommit = true;
         #sets the interest rate to market clearing
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
-        saveloc = string(saveroot,"modEnvr_commitment",j,".jld");
+        saveloc = string(saveroot,"modEnvr_consQ",j,".jld");
         @save saveloc mod;
+        saveloc = string(saveroot,"solMats_consQ",j,".jld");
+        @save saveloc ms;
         fullcommit = fullcommit_old;
         
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         println("Starting to save")
-        saveloc = string(saveroot,"modEnvr_p_iter3",j,".jld")
+        saveloc = string(saveroot,"modEnvr_p",j,".jld")
         @save saveloc mod
-        saveloc = string(saveroot,"solMats_p_iter3",j,".jld")
+        saveloc = string(saveroot,"solMats_p",j,".jld")
         @save saveloc ms
         println("About to sim_hists")
         sim_hists!(mod, ht, ms, mmt, N_ages, N_a,N_z, N_ε);
         println("Done sim_hists")
-        saveloc = string(saveroot,"simHists_p_iter3",j,".jld")
+        saveloc = string(saveroot,"simHists_p",j,".jld")
         @save saveloc ht
         saveloc = string(saveroot,"eqmQ_p",j,".jld")
         @save saveloc ms.Q0
@@ -277,6 +282,7 @@
     writedlm(file,params_header,',') # note: last argument is the delimiter which should be the same as below
     print("Done writedlm.")
         β = 0.9;ω = 0.10; ϕ_1 = 0.1; ϕ_2 = 2.0; ϕ_3 = 0.0; λ = 0.0;
+        recrate =1.0;
 
         β_f = β^(1/freq); # correct for frequency of model
         parval = OrderedDict{Symbol, Float64}(
@@ -285,7 +291,8 @@
                     :ϕ_2 => ϕ_2,
                     :ϕ_3 => ϕ_3,
                     :r =>   (1/β_f-1)*(1-ω),
-                    :λ =>   λ);
+                    :λ =>   λ,
+                    :reclaimrate => recrate);
     j = 0
     println("About to params_moments")
     params_moments(file, parval,j)
@@ -300,7 +307,8 @@
             (:β, [0.90, 0.95, 0.99, 0.995]),
             (:ϕ_1,[0.01, 0.1, 0.2, 0.3]),
             (:ϕ_2, [1.25, 2.0, 4, 5.5]),
-            (:λ , collect(LinRange(0.0, 0.06, 4))) ]);
+            (:λ , collect(LinRange(0.0, 0.06, 4))) ,
+            (:reclaimrate = [0.8 0.95 1.0])  ]);
 
 
     saveroot = pwd();
@@ -312,7 +320,7 @@
     saveloc = string(saveroot,"/simHists_p",j,".jld")
     @load saveloc ht
     println("Done loading")
-    pltages = [2 24 age_retire-40 age_retire-1 ]
+    pltages = [2 24 age_retire-40 age_retire-26 ]
     asset_grid_ages = hcat(mod.asset_grid[pltages[1],:],mod.asset_grid[pltages[2],:],mod.asset_grid[pltages[3],:],mod.asset_grid[pltages[4],:]);
     asset_grid_ages_tp1 = hcat(mod.asset_grid[pltages[1]+1,:],mod.asset_grid[pltages[2]+1,:],mod.asset_grid[pltages[3]+1,:],mod.asset_grid[pltages[4]+1,:]);
 #=
@@ -343,25 +351,35 @@
         for ei=1:N_ε
 
             Vages = hcat( ms.V[pltages[1],1,:,ei,zi],ms.V[pltages[2],1,:,ei,zi],ms.V[pltages[3],1,:,ei,zi], ms.V[pltages[4],1,:,ei,zi] );
-            plot(asset_grid_ages,Vages,label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright ,lw=3)
+            plot(asset_grid_ages,Vages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright ,lw=3)
             plot!(title = "Value Function", ylabel="", xlabel = "Asset Position")
             savefig(string("V_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
 
             Cages = hcat( ms.C[pltages[1],1,:,ei,zi],ms.C[pltages[2],1,:,ei,zi],ms.C[pltages[3],1,:,ei,zi], ms.C[pltages[4],1,:,ei,zi] );
-            plot(asset_grid_ages,Cages,label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright, lw=3)
+            plot(asset_grid_ages,Cages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "Consumption", ylabel="", xlabel = "Asset Position")
 
             savefig(string("C_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
 
             Sages = hcat( ms.S[pltages[1],1,:,ei,zi],ms.S[pltages[2],1,:,ei,zi],ms.S[pltages[3],1,:,ei,zi], ms.S[pltages[4],1,:,ei,zi] );
-            plot(asset_grid_ages,Sages,label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright, lw=3)
-            plot!(title = "Delinquency policy", ylabel="", xlabel = "Asset Position")
+            plot(asset_grid_ages,Sages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
+            plot!(title = "Pay back policy", ylabel="", xlabel = "Asset Position")
             savefig(string("S_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
 
             Apages = hcat( ms.Ap[pltages[1],1,:,ei,zi]-mod.asset_grid[pltages[1],:],ms.Ap[pltages[2],1,:,ei,zi]-mod.asset_grid[pltages[2],:],ms.Ap[pltages[3],1,:,ei,zi]-mod.asset_grid[pltages[3],:], ms.Ap[pltages[4],1,:,ei,zi]-mod.asset_grid[pltages[4],:] );
-            plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright, lw=3)
+            plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "A' policy", ylabel="a'-a", xlabel = "Asset Position")
+            savefig(string("ApMa_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
+
+            Apages = hcat( ms.Ap[pltages[1],1,:,ei,zi],ms.Ap[pltages[2],1,:,ei,zi],ms.Ap[pltages[3],1,:,ei,zi], ms.Ap[pltages[4],1,:,ei,zi] );
+            plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
+            plot!(title = "A' policy", ylabel="a'", xlabel = "Asset Position")
             savefig(string("Ap_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
+            
+            Bages = hcat( ms.B[pltages[1],1,:,ei,zi],ms.B[pltages[2],1,:,ei,zi],ms.B[pltages[3],1,:,ei,zi], ms.B[pltages[4],1,:,ei,zi] );
+            plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
+            plot!(title = "B policy", ylabel="b", xlabel = "Asset Position")
+            savefig(string("B_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
 
         end
 
@@ -375,7 +393,7 @@
         epschng = round((mod.transfer_grid[3] - mod.transfer_grid[1])*100.0)/100.0
         plot(asset_grid_ages[3:(N_a-2),:],Apages[3:(N_a-2),:])
         plot!(title = "A' change with rebate shock of $epschng", ylabel="a' change / rebate ", xlabel = "a",
-            label=["Age 1" "Age 2" "Age 3" "Age 4"],legend=:bottomright, lw=3, size=(1500,600))
+            label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright, lw=3, size=(1500,600))
         savefig(string("ApDif_ages_phi",ϕ_2,"_zi",zi,".png"))
         #=
         delQages = zeros(N_a,4 )
@@ -391,7 +409,7 @@
         end
         epschng = round((mod.transfer_grid[2] - mod.transfer_grid[1])*100.0)/100.0
         plot(asset_grid_ages,delQages)
-        plot!(title = "dQdA change with rebate of $epschng", ylabel="q change / rebate ", xlabel = "a", label=["Age 1" "Age 2" "Age 3" "Age 4"],
+        plot!(title = "dQdA change with rebate of $epschng", ylabel="q change / rebate ", xlabel = "a", label=["Young" "Middle" "Earnings Peak" "Retirement"],
             legend=:bottomright, lw=3, size=(1500,600))
         savefig(string("QDif_phi",ϕ_2,"_zi",zi,".png"))
         =#
@@ -404,9 +422,9 @@
                         (ms.C[pltages[4],2,:,3,zi]- ms.C[pltages[4],1,:,3,zi])./ (mod.transfer_grid[2] - mod.transfer_grid[1]) )
         epschng = round((mod.transfer_grid[2] - mod.transfer_grid[1])*100.0)/100.0
 
-        plot(asset_grid_ages[3:(N_a-2),:],Cages[3:(N_a-2),:])
-        plot!(title = "C change with rebate of $epschng", ylabel="c change / rebate ", xlabel = "a",
-            label=["Age 1" "Age 2" "Age 3" "Age 4"],legend=:bottomright, lw=3, size=(1500,600))
+        plot(asset_grid_ages[3:(N_a-2),:],Cages[3:(N_a-2),:],
+            label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
+        plot!(title = "C change with rebate of $epschng", ylabel="c change / rebate ", xlabel = "a", size=(1500,600))
         savefig(string("CDif_ages_phi",ϕ_2,"_zi",zi,".png"))
 
 
@@ -418,7 +436,7 @@
 
         plot(asset_grid_ages,Bages)
         plot!(title = "B change with rebate of $epschng", ylabel="b change / rebate ", xlabel = "a",
-            label=["Age 1" "Age 2" "Age 3" "Age 4"],legend=:bottomright, lw=3, size=(1500,600))
+            label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright, lw=3, size=(1500,600))
         savefig(string("BDif_ages_phi",ϕ_2,"_zi",zi,".png"))
 
 
@@ -429,7 +447,7 @@
         epschng = round((mod.transfer_grid[2] - mod.transfer_grid[1])*100.0)/100.0
         plot(asset_grid_ages,Sages)
         plot!(title = "S change with rebate of $epschng", ylabel="s change / rebate ", xlabel = "a",
-            label=["Age 1" "Age 2" "Age 3" "Age 4"],legend=:bottomright, lw=3, size=(1500,600))
+            label=["Young" "Middle" "Earnings Peak" "Retirement"],legend=:bottomright, lw=3, size=(1500,600))
         savefig(string("SDif_ages_phi",ϕ_2,"_zi",zi,".png"))
 
     end
