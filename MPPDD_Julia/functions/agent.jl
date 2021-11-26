@@ -89,7 +89,7 @@ function assetGrid(N_ages::Int64, income_grid::Array{Float64,3}, N_a::Int64,Q::A
         if t==1
             asset_max[t] = income_max
         end
-        asset_max[t+1] = min(asset_max[t]/Q[t,1,N_a] + income_max , 100)
+        asset_max[t+1] = min(asset_max[t]/Q[t,1,N_a] + income_max , income_max*5)
         if t==N_ages
             asset_max[t+1] = asset_max[t];
         end
@@ -140,10 +140,11 @@ CRRA utility
     # Nudge to avoid log(0) - type errors during runtime
     if γ == 1
         #return log(max(1e-8, c - cbar))
-        #return log( max(1e-8,c)) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
-        return log( max(1e-8,c)* (1.0-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)) ) 
+        return log( max(1e-8,c)) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
+        #return log( max(1e-8,c)* (ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)) ) 
     else
         return ((c )^(1 - γ) - 1)/(1 - γ) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
+        #return ((c *(ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)))^(1 - γ) - 1)/(1 - γ)  
     end
 end
 
