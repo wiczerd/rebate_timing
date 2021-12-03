@@ -70,6 +70,8 @@
         r::Float64
         β::Float64
         λ::Float64
+        fullcommit::Float64
+        constQ::Float64
         transfer_grid::Array{Float64,1}
 
         model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.γ =1; return modd)
@@ -207,8 +209,8 @@
 	const unevengrid = true;
 	const natborrowlimit = true;
 
-    constQ = false; #set q = 1/(1+r) or every debt level 
-    fullcommit = false; # do not allow s<1, which also implies constQ
+    const constQ = false; #set q = 1/(1+r) or every debt level
+    const fullcommit = true; # do not allow s<1, which also implies constQ
 
 
 
@@ -227,6 +229,8 @@
         mod.ϕ_3  = parval[:ϕ_3];
         mod.λ  = parval[:λ];
         mod.reclaimrate = parval[:reclaimrate];
+        mod.fullcommit = parval[:fullcommit];
+        mod.constQ = parval[:constQ];
 
         mmt = moments();
         age_peak       = (Yrs_retire-10)*freq; # corresponds to 50-55, at which income peaks
@@ -240,16 +244,16 @@
         draw_shocks!(mod,ht, 12281951);
 
         #first do it with full commitment
-        fullcommit_old = fullcommit;
-        fullcommit = true;
+        fullcommit_old = mod.fullcommit;
+        mod.fullcommit = true;
         #sets the interest rate to market clearing
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         saveloc = string(saveroot,"modEnvr_consQ",j,".jld");
         @save saveloc mod;
         saveloc = string(saveroot,"solMats_consQ",j,".jld");
         @save saveloc ms;
-        fullcommit = fullcommit_old;
-        
+        mod.fullcommit = fullcommit_old;
+
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         println("Starting to save")
         saveloc = string(saveroot,"modEnvr_p",j,".jld")
@@ -292,7 +296,9 @@
                     :ϕ_3 => ϕ_3,
                     :r =>   (1/β_f-1)*(1-ω),
                     :λ =>   λ,
-                    :reclaimrate => recrate);
+                    :reclaimrate => recrate,
+                    :fullcommit => fullcommit,
+                    :constQ => constQ);
     j = 0
     println("About to params_moments")
     params_moments(file, parval,j)
@@ -307,8 +313,9 @@
             (:β, [0.90, 0.95, 0.99, 0.995]),
             (:ϕ_1,[0.01, 0.1, 0.2, 0.3]),
             (:ϕ_2, [1.25, 2.0, 4, 5.5]),
-            (:λ , collect(LinRange(0.0, 0.06, 4))) ,
-            (:reclaimrate = [0.8 0.95 1.0])  ]);
+            (:λ , collect(LinRange(0.0, 0.06, 4))),
+            (:reclaimrate, [0.8 0.95 1.0]),
+            (:fullcommit, [1.0, .9, .8])  ]);
 
 
     saveroot = pwd();
@@ -375,7 +382,7 @@
             plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "A' policy", ylabel="a'", xlabel = "Asset Position")
             savefig(string("Ap_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
-            
+
             Bages = hcat( ms.B[pltages[1],1,:,ei,zi],ms.B[pltages[2],1,:,ei,zi],ms.B[pltages[3],1,:,ei,zi], ms.B[pltages[4],1,:,ei,zi] );
             plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "B policy", ylabel="b", xlabel = "Asset Position")

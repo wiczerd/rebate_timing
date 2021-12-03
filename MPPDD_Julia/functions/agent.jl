@@ -43,7 +43,7 @@ function assetGrid(N_ages::Int64, income_grid::Array{Float64,3}, N_a::Int64,Q::A
 		        if minimum(asset_grid_old[t+1,:])<0
 		            asset_min_tz = Inf;
 		            for zi=1:N_z
-		                qa_aip1 = 0.0;
+		                f = 0.0;
 		                for ai = N_a:-1:1
 
 		                    if asset_grid_old[t+1,ai]<0
@@ -140,11 +140,11 @@ CRRA utility
     # Nudge to avoid log(0) - type errors during runtime
     if γ == 1
         #return log(max(1e-8, c - cbar))
-        return log( max(1e-8,c)) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
-        #return log( max(1e-8,c)* (ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)) ) 
+        return log( max(1e-8,c)) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3)
+        #return log( max(1e-8,c)* (ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)) )
     else
-        return ((c )^(1 - γ) - 1)/(1 - γ) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
-        #return ((c *(ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)))^(1 - γ) - 1)/(1 - γ)  
+        return ((c )^(1 - γ) - 1)/(1 - γ) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3)
+        #return ((c *(ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)))^(1 - γ) - 1)/(1 - γ)
     end
 end
 
@@ -165,9 +165,9 @@ function bobjective(b::Float64, s::Float64, y::Float64, q_spn::Schumaker, #Array
     if ap>atp_grid[length(atp_grid)] || ap<atp_grid[1]
         println("ap out of bounds: (ap,b,s,a)= ($ap, $b, $s, $a)");
         ap0 = ap<atp_grid[1] ? atp_grid[1] : atp_grid[length(atp_grid)]
-        EVp= SchumakerSpline.evaluate(EVp_spn,ap0) - (ap-ap0)^2; 
-        q_ap = max( SchumakerSpline.evaluate(q_spn,ap0) , 0.0); 
-    
+        EVp= SchumakerSpline.evaluate(EVp_spn,ap0) - (ap-ap0)^2;
+        q_ap = max( SchumakerSpline.evaluate(q_spn,ap0) , 0.0);
+
     end
 
     c = y + a*s - q_ap*b;
@@ -194,12 +194,12 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
 
     #this portion tried to ensure c>0 when saving a lot:
     # 0 < y + a*s - q_(b + (1-s)*a)*bmax2; sometimes: (y+a*s)*(1+r)
-    bmax_c0 = (y+a*s)*(1+r); 
+    bmax_c0 = (y+a*s)*(1+r);
     # can save enough to get into positive assets, so q = 1/(1+r)
-    # check if I'm consuming positive and 
-    if (y - bmax_c0/(1.0 + r) + a*s) > 0 && bmax_c0 + (1-s)*a >0 
+    # check if I'm consuming positive and
+    if (y - bmax_c0/(1.0 + r) + a*s) > 0 && bmax_c0 + (1-s)*a >0
         bmax = min(bmax,bmax_c0);
-    
+
     else #can't save enough to get positive assets
         #qmin = bmax_c0 + (1.0 - s)*a > atp[1] ?  CubicSplineInterpolation(atp, q_spn)( bmax_c0 + (1.0 - s)*a ) :
         #CubicSplineInterpolation(atp, q_spn)( bmax_c0 + (1.0 - s)*a )(atp[1] );
@@ -216,7 +216,7 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
         # println("age is $t and atp is $atp ");
         # println("bmax < bmin ($bmax < $bmin) in max_bojb  at a = $a , s = $s")
         bopt = bmin;
-        
+
         return bobjective(bmin, s, y, q_spn, atp, a, t, EVp_spn, cbar, ψ, β, ϕ_1, ϕ_2,ϕ_3, γ), bopt
     end
 end
@@ -284,7 +284,7 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
         #return V, B, C, S, Ap;
         Apopt = Apopt > atp[N_a] ? atp[N_a] : Apopt > atp[1]
     end
-    
+
     copt = y + a0[ai]*sopt - SchumakerSpline.evaluate(q_spn,Apopt)*bopt ;
 
     return vopt,sopt,bopt,copt, Apopt
@@ -343,7 +343,7 @@ function backwardSolve!(ms::sol, mod::model,
 
                 EVp_spn = Schumaker(atp,EVp_grid);
                 q_spn = Schumaker(atp,qhr);
-                
+
                 @inbounds for εi = 1:N_ε
                     y = mod.Ygrid[t, εi, zi] + transf;
 
@@ -385,7 +385,7 @@ function backwardSolve!(ms::sol, mod::model,
                                 bopt = bmin;
                                 vopt = bobjective(bopt, sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.cbar,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ);
                                  println("bmin > bmax: $bmin > $bmax with $vopt, $bopt")
-                    
+
                             else
                                 b_solution_struct::Optim.OptimizationResults = optimize(b -> -1*bobjective(b, sopt, y, q_spn, atp, a0hr, t,EVp_spn, mod.cbar,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ), bmin, bmax);
                                 vopt          = -1.0 * Optim.minimum(b_solution_struct);
@@ -398,15 +398,15 @@ function backwardSolve!(ms::sol, mod::model,
                             ms.B[t, tri, ai, εi, zi] = bopt;
                             ms.C[t, tri, ai, εi, zi] = copt;
                             ms.Ap[t, tri, ai, εi, zi] = Apopt;
-                        end 
+                        end
                         nonmono = nonmono+1
-                    end 
+                    end
                     if nonmono >0
                         println(" At t,tri,εi,zi= ($t,$tri,$εi,$zi) have $nonmono many non-monotone ")
                     end
                     =#
                 end
-                
+
             end
         end #tri loop over transfer
     end
