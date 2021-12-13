@@ -241,14 +241,14 @@
 
         #first do it with full commitment
         fullcommit_old = fullcommit;
-        fullcommit = true;
+        global fullcommit = true;
         #sets the interest rate to market clearing
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         saveloc = string(saveroot,"modEnvr_commitment",j,".jld");
         @save saveloc mod;
         saveloc = string(saveroot,"solMats_commitment",j,".jld");
         @save saveloc ms;
-        fullcommit = fullcommit_old;
+        global fullcommit = fullcommit_old;
         
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         println("Starting to save")
@@ -302,7 +302,7 @@
     # momentsout  = SharedArray{Float64}(length(parvals),Nmoments);
 
 
-    # parameter grids, annual values (where relevant)
+    #= parameter grids, annual values (where relevant)
     param_grids  = OrderedDict{Symbol,Array{Float64,1}}([
             (:ω, collect(LinRange(0.01, 0.99, 4)) ),
             (:β, [0.90, 0.95, 0.99, 0.995]),
