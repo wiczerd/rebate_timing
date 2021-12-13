@@ -153,11 +153,11 @@ Define current utility + continuation value
 """
 function bobjective(b::Float64, s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64,1}, #
     atp_grid::Array{Float64,1}, a::Float64, t::Int64, EVp_spn:: Schumaker, #Array{Float64,1}, #
-    cbar::Float64, ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Float64
+    reclaimrate::Float64, ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Float64
     # Note: b, s, y, ψ are levels.
 
     # Get level of capital implied by next-period consumption choice
-    ap = b + (1.0 - s)*a;
+    ap = b + (1.0 - s)*a*reclaimrate;
 
     EVp= SchumakerSpline.evaluate(EVp_spn,ap) ; #LinearInterpolation(atp_grid, EV_spn)(ap); #
     q_ap = max( SchumakerSpline.evaluate(q_spn,ap) , 0.0); #max( CubicSplineInterpolation(atp_grid, q_spn)(ap) , 0.0);
@@ -187,7 +187,7 @@ Solve for optimal b, given s
 
 function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64,1}, #
     atp::Array{Float64,1}, a::Float64, t::Int64, EVp_spn::Schumaker,
-    cbar::Float64,r::Float64,ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Tuple{Float64,Float64}
+    reclaimrate::Float64,r::Float64,ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Tuple{Float64,Float64}
 
     bmin = atp[1]   - (1.0 - s) * a ;
     bmax = atp[N_a] - (1.0 - s) * a ;
@@ -209,7 +209,7 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
     end
 
     if bmax > bmin
-        res::Optim.OptimizationResults = optimize(b -> -1.0*bobjective(b, s, y, q_spn, atp, a,t, EVp_spn, cbar,ψ, β, ϕ_1, ϕ_2, ϕ_3, γ), bmin, bmax);
+        res::Optim.OptimizationResults = optimize(b -> -1.0*bobjective(b, s, y, q_spn, atp, a,t, EVp_spn, reclaimrate,ψ, β, ϕ_1, ϕ_2, ϕ_3, γ), bmin, bmax);
         bopt = Optim.minimizer(res);
         return -1.0*Optim.minimum(res), bopt;  # the maximum
     else
@@ -217,7 +217,7 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
         # println("bmax < bmin ($bmax < $bmin) in max_bojb  at a = $a , s = $s")
         bopt = bmin;
         
-        return bobjective(bmin, s, y, q_spn, atp, a, t, EVp_spn, cbar, ψ, β, ϕ_1, ϕ_2,ϕ_3, γ), bopt
+        return bobjective(bmin, s, y, q_spn, atp, a, t, EVp_spn, reclaimrate, ψ, β, ϕ_1, ϕ_2,ϕ_3, γ), bopt
     end
 end
 
@@ -240,16 +240,16 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
     if  a0hr >= 0 || fullcommit == true
         sopt          = 1.0;
 
-        bmax::Float64 = min(apmax - (1.0 - sopt) * a0hr , (y+a0hr*sopt )*(1.0+ mod.r) );
-        bmin::Float64 = apmin   - (1.0 - sopt) * a0hr  ;
+        bmax::Float64 = min(apmax  , (y+a0hr*sopt )*(1.0+ mod.r) );
+        bmin::Float64 = apmin    ;
         if bmin > bmax
             #println("bmin > bmax: $bmin > $bmax at $t, $ai, and $a0hr")
             bopt = bmin;
-            vopt = bobjective(bopt, sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.cbar,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ);
+            vopt = bobjective(bopt, sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.reclaimrate,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ);
              println("bmin > bmax: $bmin > $bmax with $vopt, $bopt")
 
         else
-            b_solution_struct::Optim.OptimizationResults = optimize(b -> -1*bobjective(b, sopt, y, q_spn, atp, a0hr, t,EVp_spn, mod.cbar,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ), bmin, bmax);
+            b_solution_struct::Optim.OptimizationResults = optimize(b -> -1*bobjective(b, sopt, y, q_spn, atp, a0hr, t,EVp_spn, mod.reclaimrate,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ), bmin, bmax);
             vopt          = -1.0 * Optim.minimum(b_solution_struct);
             bopt          = Optim.minimizer(b_solution_struct);
         end
@@ -261,7 +261,7 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
             smax = min(1.0,  (1e-6 - y + qhr1*atp[1]-qhr1*a0hr)/(a0hr - a0hr*qhr1)  )
         end
         if smax > 0
-            res_s::Optim.OptimizationResults = optimize( shr-> -1.0*(max_bobjective(shr, y, q_spn, atp, a0hr, t, EVp_spn, mod.cbar,mod.r,ψ, mod.β, mod.ϕ_1 , mod.ϕ_2, mod.ϕ_3, γ)[1]), 0.0,smax,
+            res_s::Optim.OptimizationResults = optimize( shr-> -1.0*(max_bobjective(shr, y, q_spn, atp, a0hr, t, EVp_spn, mod.reclaimrate,mod.r,ψ, mod.β, mod.ϕ_1 , mod.ϕ_2, mod.ϕ_3, γ)[1]), 0.0,smax,
                 Brent(); iterations = 100,abs_tol=1e-5  );
             minout    = Optim.minimizer(res_s);
             sopt = minout[1];
@@ -269,7 +269,7 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
             sopt = 0.0;
         end
 
-        vopt,bopt = max_bobjective(sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.cbar,mod.r,ψ,mod.β, mod.ϕ_1 , mod.ϕ_2, mod.ϕ_3, γ);
+        vopt,bopt = max_bobjective(sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.reclaimrate,mod.r,ψ,mod.β, mod.ϕ_1 , mod.ϕ_2, mod.ϕ_3, γ);
 
 
     end
@@ -334,7 +334,7 @@ function backwardSolve!(ms::sol, mod::model,
                                 EVp_grid[aii] = ms.V[t+1, 1, aii, eii, zii ]*mod.εprobs[t,eii]*mod.zprobs[t,zi,zii] + EVp_grid[aii];
                             else
                                 c = mod.Ygrid[t, eii, zii] + transf + mod.asset_grid[t];
-                                uc = c > 0.0 ? u(c,1.0, γ, mod.ϕ_1,ϕ_2,ϕ_3 ) : u(1e-6,1.0,γ, mod.ϕ_1,ϕ_2,ϕ_3);
+                                uc = c > 0.0 ? u(c,1.0, γ, mod.ϕ_1,mod.ϕ_2,mod.ϕ_3 ) : u(1e-6,1.0,γ, mod.ϕ_1,mod.ϕ_2,mod.ϕ_3);
                                 EVp_grid[aii] = uc *mod.εprobs[t,eii]*mod.zprobs[t,zi,zii] + EVp_grid[aii];
                             end
                         end
@@ -355,7 +355,7 @@ function backwardSolve!(ms::sol, mod::model,
                             ms.S[t, tri, ai, εi, zi] = 1.0;
                             ms.B[t, tri, ai, εi, zi] = 0.0;
                             ms.C[t, tri, ai, εi, zi] = a0[ai] + y + transf;
-                            ms.V[t, tri, ai, εi, zi] = u(ms.C[t, tri, ai, εi, zi], 1.0, γ, mod.ϕ_1,ϕ_2,ϕ_3);
+                            ms.V[t, tri, ai, εi, zi] = u(ms.C[t, tri, ai, εi, zi], 1.0, γ,  mod.ϕ_1,mod.ϕ_2,mod.ϕ_3);
                             ms.Ap[t,tri, ai, εi, zi] = 0.0;
                             continue
                         end
@@ -371,40 +371,7 @@ function backwardSolve!(ms::sol, mod::model,
 
                     end
                     nonmono = 0
-                    #=check that S is monotone in A and if not, re-arrange it.
-                    for ai=(N_a-1):(-1):1
-                        if( ms.S[t, tri, ai, εi, zi] > ms.S[t, tri, ai+1, εi, zi] )
-                            a0hr =  mod.asset_grid[t,ai];
-                            apmax = mod.asset_grid[t,N_a];
-                            apmin = mod.asset_grid[t,1];
-                            sopt = ms.S[t, tri, ai+1, εi, zi];
-                            bmax::Float64 = min(apmax - (1.0 - sopt) * a0hr , (y+a0hr*sopt )*(1.0+ mod.r) );
-                            bmin::Float64 = apmin   - (1.0 - sopt) * a0hr  ;
-                            if bmin > bmax
-                                #println("bmin > bmax: $bmin > $bmax at $t, $ai, and $a0hr")
-                                bopt = bmin;
-                                vopt = bobjective(bopt, sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.cbar,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ);
-                                 println("bmin > bmax: $bmin > $bmax with $vopt, $bopt")
                     
-                            else
-                                b_solution_struct::Optim.OptimizationResults = optimize(b -> -1*bobjective(b, sopt, y, q_spn, atp, a0hr, t,EVp_spn, mod.cbar,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ), bmin, bmax);
-                                vopt          = -1.0 * Optim.minimum(b_solution_struct);
-                                bopt          = Optim.minimizer(b_solution_struct);
-                            end
-                            Apopt = bopt + (1.0 - sopt)*mod.asset_grid[t,ai];
-                            copt = y + a0[ai]*sopt - SchumakerSpline.evaluate(q_spn,Apopt)*bopt ;
-                            ms.V[t, tri, ai, εi, zi] = vopt;
-                            ms.S[t, tri, ai, εi, zi] = sopt;
-                            ms.B[t, tri, ai, εi, zi] = bopt;
-                            ms.C[t, tri, ai, εi, zi] = copt;
-                            ms.Ap[t, tri, ai, εi, zi] = Apopt;
-                        end 
-                        nonmono = nonmono+1
-                    end 
-                    if nonmono >0
-                        println(" At t,tri,εi,zi= ($t,$tri,$εi,$zi) have $nonmono many non-monotone ")
-                    end
-                    =#
                 end
                 
             end

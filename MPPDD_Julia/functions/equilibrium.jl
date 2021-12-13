@@ -42,13 +42,15 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
     #++++++++++++++++++++++++++++++++++++++++++
     # use last Q as a guess or go back to our initial one?
     rlow  =-0.025;
-    rhigh = 2*mod.r + rlow;
-    
+    rhigh = 2*mod.r - rlow;
+
+
     for qiter = 1:maxiterq
        
         @time backwardSolve!(ms,mod, N_ages, N_a, N_z, N_ε, ms.Q0);
         excessdemand =0.0;
-        if fullcommit == false 
+        
+        if fullcommit == false && constQ == false
             Q = equilibriumQ(ms.Q0, ms, mod);
 
             Qdist = maximum( abs.(Q .- ms.Q0) );
@@ -83,7 +85,7 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
             mmt_i = moments();
             sim_hists!(mod,ht,ms,mmt_i,N_ages,N_a,N_z,N_ε);
             excessdemand = mean(ht.ahist);
-            println("Full commmitment excess demand is $excessdemand")
+            println("Excess demand is $excessdemand")
             if excessdemand >0
                 rhigh = mod.r;
             else
@@ -94,7 +96,7 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
       
         #this seems to be an allocation/creation operation rather than element-wise assignment
         # Q0 = deepcopy(Q);
-        if fullcommit == false
+        if fullcommit == false && constQ==false
             for t=1:N_ages
                 for zi = 1:N_z
                     for api = 1:N_a
@@ -104,8 +106,9 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
             end
         else 
             ms.Q0 .= 1.0/(1.0 + mod.r);
-            println("New interest rate is $(mod.r) and bounds: $rlow,$rhigh")
             Qdist  = rhigh-rlow;
+            println("New interest rate is $(mod.r) and bounds: $rlow,$rhigh")
+            
         end 
         
         
@@ -114,7 +117,7 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
         # asset grid depends on Q, so update as I go
         # update the grid a bit more slowly than the Q 
         # can't keep updating it 
-        elseif  fixedassetgrid==false && fullcommit==false
+        elseif  fixedassetgrid==false && fullcommit==false && constQ==false
             
             asset_grid_new = assetGrid(N_ages, mod.Ygrid, N_a, ms.Q0, mod.asset_grid, mod.r, grid_curvature);
             #asset_grid_new = (1.0 - updq/2) .* mod.asset_grid .+ updq/2 .* asset_grid_hr;
@@ -134,9 +137,13 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
             mina = minimum(mod.asset_grid);
             
             println("On iter $qiter, most possible borrowing: $mina")
-        elseif fullcommit ==true
+        elseif fullcommit ==true || constQ==true
+            println("Making new asset grid on iteration $qiter")
             asset_grid_new = assetGrid(N_ages, mod.Ygrid, N_a, ms.Q0, mod.asset_grid, mod.r, grid_curvature);
             mod.asset_grid .= asset_grid_new;
+            mina = minimum(mod.asset_grid);
+            
+            println("On iter $qiter, most possible borrowing: $mina")
         else 
             println("Q iteration $qiter")
         end 
@@ -196,9 +203,9 @@ function equilibriumQ(Q0::Array{Float64,3}, ms::sol, mod::model)
                         shr = ms.S[tp1, 1, ai, εi, zii];
                     
                         qp      = LinearInterpolation(asset_grid[tp2 ,:],Q0[tp1  ,zii,:])(app);
-                        qimplied[t, zi, ai] =  ( shr + (1-shr)*qp
+                        qimplied[t, zi, ai] =  ( shr + (1-shr)*qp*mod.reclaimrate
                             )*εprobs[t,εi]*zprobs[t,zi,zii] +
-                            qimplied[t, zi, ai] ;
+                            qimplied[t, zi, ai] ;  #risk premium on loans. Will discount by risk-free below:
 
                     end
                 end
@@ -213,6 +220,7 @@ function equilibriumQ(Q0::Array{Float64,3}, ms::sol, mod::model)
                     println("infinite/non-positive q ($qhr), not 1 at $t,$zi,$ai");
                     qimplied[t, zi, ai] = 0.0;
                 end
+                # discount by the risk-free rate
                 if asset_grid[t,ai] >= 0.0 
                     qimplied[t,zi,ai] =   qimplied[t,zi,ai]./(1.0 + r); # needs to be w/in the t loop otherwise for periods with T>=2 will double multiply by 1/(1+r)
                 else 
