@@ -90,6 +90,7 @@ function assetGrid(N_ages::Int64, income_grid::Array{Float64,3}, N_a::Int64,Q::A
             asset_max[t] = income_max
         end
         asset_max[t+1] = min(asset_max[t]/Q[t,1,N_a] + income_max , income_max*5)
+        asset_max[t+1] = max(asset_max[t+1] , asset_max[t])
         if t==N_ages
             asset_max[t+1] = asset_max[t];
         end
