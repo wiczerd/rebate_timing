@@ -24,11 +24,11 @@ function assetGrid(N_ages::Int64, income_grid::Array{Float64,3}, N_a::Int64,Q::A
 		    end
 		    if t>=age_retire
 		        #spps pay back the whole thing:
-		        asset_min[t] = (asset_min[t+1] - income_min)*qbar + 1e-4;
+		        asset_min[t] = qbar*asset_min[t+1] - income_min + 1e-4;
 		    else
 		        #spps not pay back at all
 		        #asset_min[t] = asset_min[t+1] - (income_min + 1e-4)/qbar;
-		        asset_min[t] = (asset_min[t+1] - income_min)*qbar + 1e-4;
+		        asset_min[t] = qbar*asset_min[t+1] - income_min + 1e-4;
 		        if isnan( asset_min[t])
 		            asset_min[t]= asset_min[t+1]
 		        end
@@ -141,11 +141,11 @@ CRRA utility
     # Nudge to avoid log(0) - type errors during runtime
     if γ == 1
         #return log(max(1e-8, c - cbar))
-        return log( max(1e-8,c)) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
-        #return log( max(1e-8,c)* (ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)) ) 
+        return log( max(1e-8,c)) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3)
+        #return log( max(1e-8,c)* (ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)) )
     else
-        return ((c )^(1 - γ) - 1)/(1 - γ) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3) 
-        #return ((c *(ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)))^(1 - γ) - 1)/(1 - γ)  
+        return ((c )^(1 - γ) - 1)/(1 - γ) -  ϕ(s, ϕ_1,ϕ_2,ϕ_3)
+        #return ((c *(ϕ_1-  ϕ(s, ϕ_1,ϕ_2,ϕ_3)))^(1 - γ) - 1)/(1 - γ)
     end
 end
 
@@ -153,22 +153,22 @@ end
 Define current utility + continuation value
 """
 function bobjective(b::Float64, s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64,1}, #
-    atp_grid::Array{Float64,1}, a::Float64, t::Int64, EVp_spn:: Schumaker, #Array{Float64,1}, #
+    atp_grid::Array{Float64,1}, a::Float64, t::Int64, EVp_spn:: Array{Float64,1}, #Schumaker, #
     reclaimrate::Float64, ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Float64
     # Note: b, s, y, ψ are levels.
 
     # Get level of capital implied by next-period consumption choice
     ap = b + (1.0 - s)*a*reclaimrate;
 
-    EVp= SchumakerSpline.evaluate(EVp_spn,ap) ; #LinearInterpolation(atp_grid, EV_spn)(ap); #
+    EVp= LinearInterpolation(atp_grid, EV_spn)(ap); #SchumakerSpline.evaluate(EVp_spn,ap) ; #
     q_ap = max( SchumakerSpline.evaluate(q_spn,ap) , 0.0); #max( CubicSplineInterpolation(atp_grid, q_spn)(ap) , 0.0);
 
     if ap>atp_grid[length(atp_grid)] || ap<atp_grid[1]
         println("ap out of bounds: (ap,b,s,a)= ($ap, $b, $s, $a)");
         ap0 = ap<atp_grid[1] ? atp_grid[1] : atp_grid[length(atp_grid)]
-        EVp= SchumakerSpline.evaluate(EVp_spn,ap0) - (ap-ap0)^2; 
-        q_ap = max( SchumakerSpline.evaluate(q_spn,ap0) , 0.0); 
-    
+        EVp=  LinearInterpolation(atp_grid, EV_spn)(ap); # SchumakerSpline.evaluate(EVp_spn,ap0) - (ap-ap0)^2;
+        q_ap = max( SchumakerSpline.evaluate(q_spn,ap0) , 0.0);
+
     end
 
     c = y + a*s - q_ap*b;
@@ -187,7 +187,7 @@ Solve for optimal b, given s
 """
 
 function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64,1}, #
-    atp::Array{Float64,1}, a::Float64, t::Int64, EVp_spn::Schumaker,
+    atp::Array{Float64,1}, a::Float64, t::Int64, EVp_spn::Array{Float64,1}, #Schumaker,
     reclaimrate::Float64,r::Float64,ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Tuple{Float64,Float64}
 
     bmin = atp[1]   - (1.0 - s) * a ;
@@ -195,12 +195,12 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
 
     #this portion tried to ensure c>0 when saving a lot:
     # 0 < y + a*s - q_(b + (1-s)*a)*bmax2; sometimes: (y+a*s)*(1+r)
-    bmax_c0 = (y+a*s)*(1+r); 
+    bmax_c0 = (y+a*s)*(1+r);
     # can save enough to get into positive assets, so q = 1/(1+r)
-    # check if I'm consuming positive and 
-    if (y - bmax_c0/(1.0 + r) + a*s) > 0 && bmax_c0 + (1-s)*a >0 
+    # check if I'm consuming positive and
+    if (y - bmax_c0/(1.0 + r) + a*s) > 0 && bmax_c0 + (1-s)*a >0
         bmax = min(bmax,bmax_c0);
-    
+
     else #can't save enough to get positive assets
         #qmin = bmax_c0 + (1.0 - s)*a > atp[1] ?  CubicSplineInterpolation(atp, q_spn)( bmax_c0 + (1.0 - s)*a ) :
         #CubicSplineInterpolation(atp, q_spn)( bmax_c0 + (1.0 - s)*a )(atp[1] );
@@ -217,14 +217,14 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
         # println("age is $t and atp is $atp ");
         # println("bmax < bmin ($bmax < $bmin) in max_bojb  at a = $a , s = $s")
         bopt = bmin;
-        
+
         return bobjective(bmin, s, y, q_spn, atp, a, t, EVp_spn, reclaimrate, ψ, β, ϕ_1, ϕ_2,ϕ_3, γ), bopt
     end
 end
 
 
-function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float64,1},
-    EVp_spn::Schumaker, N_a::Int64, zi::Int64, εi::Int64,ai::Int64,t::Int64,ψ::Float64,q_spn::Schumaker)::Tuple{Float64,Float64,Float64,Float64,Float64}  # qhr::Array{Float64,1})::Tuple{Float64,Float64,Float64,Float64,Float64}
+function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float64,1},EVp_spn::Array{Float64,1}, #Schumaker, 
+    N_a::Int64, zi::Int64, εi::Int64,ai::Int64,t::Int64,ψ::Float64,q_spn::Schumaker)::Tuple{Float64,Float64,Float64,Float64,Float64}  # qhr::Array{Float64,1})::Tuple{Float64,Float64,Float64,Float64,Float64}
 
     a0hr = a0[ai];
 
@@ -278,14 +278,14 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
     # Budget constraint
     # a_{t + 1} = 1 / q() * (a * s + y - c) + (1 - s) * a =>
     # c= y + a * s - q(a(),a' * b
-    Apopt = bopt + (1.0 - sopt)*a0[ai];
+    Apopt = bopt + (1.0 - sopt)*a0[ai]*mod.reclaimrate;
     if Apopt > atp[N_a] || Apopt < atp[1]
         at1 = atp[1];
         println("Outside of A grid at $t, $ai, $εi, $zi : $Apopt < $at1 and $bopt, $sopt");
         #return V, B, C, S, Ap;
         Apopt = Apopt > atp[N_a] ? atp[N_a] : Apopt > atp[1]
     end
-    
+
     copt = y + a0[ai]*sopt - SchumakerSpline.evaluate(q_spn,Apopt)*bopt ;
 
     return vopt,sopt,bopt,copt, Apopt
@@ -342,9 +342,9 @@ function backwardSolve!(ms::sol, mod::model,
                     end
                 end
 
-                EVp_spn = Schumaker(atp,EVp_grid);
+                #EVp_spn = Schumaker(atp,EVp_grid);
                 q_spn = Schumaker(atp,qhr);
-                
+
                 @inbounds for εi = 1:N_ε
                     y = mod.Ygrid[t, εi, zi] + transf;
 
@@ -361,7 +361,8 @@ function backwardSolve!(ms::sol, mod::model,
                             continue
                         end
 
-                        (vopt,sopt,bopt,copt, Apopt) = solve_ai(mod,y,atp,a0,EVp_spn,N_a,zi,εi,ai,t,ψ,q_spn);
+                        (vopt,sopt,bopt,copt, Apopt) = solve_ai(mod,y,atp,a0,EVp_grid, #EVp_spn,
+                                    N_a,zi,εi,ai,t,ψ,q_spn);
 
                         ms.V[t, tri, ai, εi, zi] = vopt;
                         ms.S[t, tri, ai, εi, zi] = sopt;
@@ -372,9 +373,9 @@ function backwardSolve!(ms::sol, mod::model,
 
                     end
                     nonmono = 0
-                    
+
                 end
-                
+
             end
         end #tri loop over transfer
     end
