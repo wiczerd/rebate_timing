@@ -39,19 +39,24 @@
         B::Array{Float64,5}    # defined for (N_ages,N_t,N_a,N_ε, N_z)
         Ap::Array{Float64,5}   # defined for (N_ages,N_t,N_a,N_ε, N_z)
         Q0::Array{Float64,3}   # defined for (N_ages,N_z,N_a) known states
-
+        V_frontier::Array{Float64,6}   # defined for (N_ages,N_a,N_ε, N_z, sidx,N_a)
+        B_frontier::Array{Float64,6}   # defined for (N_ages,N_a,N_ε, N_z, sidx, N_a)
         Aεz_dist::Array{Float64,4} #Equilibrium distribution across state (N_ages,a,z,ε)
     end
 
     function sol()
-        V  = zeros(N_ages+1,N_t,N_a,N_ε, N_z); #value function 
+        V  = zeros(N_ages+1,N_t,N_a,N_ε, N_z); #value function
         C  = zeros(N_ages,N_t,N_a,N_ε, N_z);   #consumption
         S  = zeros(N_ages,N_t,N_a,N_ε, N_z);   # pay back rate
         B  = zeros(N_ages,N_t,N_a,N_ε, N_z);   # change in asset position
         Ap = zeros(N_ages,N_t,N_a,N_ε, N_z);   # asset position tomorrow
         Q0 = zeros(N_ages, N_z,N_a);           # interest rate function
+        V_frontier= zeros(N_ages,N_a,N_ε, N_z, 3,N_a);   
+        B_frontier= zeros(N_ages,N_a,N_ε, N_z, 3,N_a);   
         Aεz_dist = zeros(N_ages,N_a,N_ε,N_z);  # distribution over states
-        return sol(V,C,S,B,Ap,Q0,Aεz_dist)
+
+
+        return sol(V,C,S,B,Ap,Q0,V_frontier,B_frontier,Aεz_dist)
     end
 
     mutable struct model
@@ -67,9 +72,9 @@
         ϕ_2::Float64 # curvature
         ϕ_3::Float64 # fixed costs
         reclaimrate::Float64 #h in the model... the fraction not taken by haircut
-        r::Float64 
+        r::Float64
         β::Float64
-        λ::Float64 
+        λ::Float64
         transfer_grid::Array{Float64,1}
 
         model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.γ =1; return modd)
@@ -163,6 +168,8 @@
     const freq         = 4; # 1=annual, 4=quarterly
     const γ            = 1;
 
+    const debug_saves  = 1; # should we save stuff for debugging? If 1, then yes.
+    print_lev = 0;
 
     ## State space
 
@@ -207,7 +214,7 @@
 	const unevengrid = true;
 	const natborrowlimit = true;
 
-    constQ = false; #set q = 1/(1+r) or every debt level 
+    constQ = false; #set q = 1/(1+r) or every debt level
     fullcommit = false; # do not allow s<1, which also implies constQ
 
 
@@ -239,6 +246,7 @@
 
         draw_shocks!(mod,ht, 12281951);
 
+
         #first do it with full commitment
         fullcommit_old = fullcommit;
         global fullcommit = true;
@@ -249,24 +257,25 @@
         saveloc = string(saveroot,"solMats_commitment",j,".jld");
         @save saveloc ms;
         global fullcommit = fullcommit_old;
-        
-        ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
-        println("Starting to save")
-        j=1;
-        saveloc = string(saveroot,"modEnvr_p",j,".jld")
-        @save saveloc mod
-        saveloc = string(saveroot,"solMats_p",j,".jld")
-        @save saveloc ms
-        println("About to sim_hists")
-        sim_hists!(mod, ht, ms, mmt, N_ages, N_a,N_z, N_ε);
-        println("Done sim_hists")
-        saveloc = string(saveroot,"simHists_p",j,".jld")
-        @save saveloc ht
-        saveloc = string(saveroot,"eqmQ_p",j,".jld")
-        @save saveloc ms.Q0
-        saveloc = string(saveroot,"mmts_p",j,".jld")
-        @save saveloc mmt
-        println("Done saving..")
+        if fullcommit==false
+            ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
+            println("Starting to save")
+            j=1;
+            saveloc = string(saveroot,"modEnvr_p",j,".jld")
+            @save saveloc mod
+            saveloc = string(saveroot,"solMats_p",j,".jld")
+            @save saveloc ms
+            println("About to sim_hists")
+            sim_hists!(mod, ht, ms, mmt, N_ages, N_a,N_z, N_ε);
+            println("Done sim_hists")
+            saveloc = string(saveroot,"simHists_p",j,".jld")
+            @save saveloc ht
+            saveloc = string(saveroot,"eqmQ_p",j,".jld")
+            @save saveloc ms.Q0
+            saveloc = string(saveroot,"mmts_p",j,".jld")
+            @save saveloc mmt
+            println("Done saving..")
+        end
         outvec = reshape([j, mod.r, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, mod.λ , mmt.fr_neg_asset, mmt.avg_debt,mmt.avg_s, mmt.extent_delinq,mmt.fr_s1, mmt.avg_income,mmt.avg_income_neg_asset,mmt.mpc_ac0],1,Nparams+Nmoments+1 );
 
         iohr = open(iofilename,"a")
@@ -283,7 +292,7 @@
     writedlm(file,params_header,',') # note: last argument is the delimiter which should be the same as below
     print("Done writedlm.")
         β = 0.9;ω = 0.10; ϕ_1 = 0.1; ϕ_2 = 2.0; ϕ_3 = 0.0; λ = 0.0;
-        recrate =0.90;
+        recrate =1.00;
 
         β_f = β^(1/freq); # correct for frequency of model
         parval = OrderedDict{Symbol, Float64}(
@@ -322,7 +331,7 @@
     @load saveloc ht
     println("Done loading")
     top_A = N_a
-    pltages = [age_retire-3 age_retire-2 age_retire+2 N_ages-1]; 
+    pltages = [age_retire-3 age_retire-2 age_retire+2 N_ages-1];
     pltages = [2 24 age_retire-40 age_retire-26 ]
     #asset_grid_ages = hcat(mod.asset_grid[pltages[1],:],mod.asset_grid[pltages[2],:],mod.asset_grid[pltages[3],:],mod.asset_grid[pltages[4],:]);
     #asset_grid_ages_tp1 = hcat(mod.asset_grid[pltages[1]+1,:],mod.asset_grid[pltages[2]+1,:],mod.asset_grid[pltages[3]+1,:],mod.asset_grid[pltages[4]+1,:]);
@@ -360,7 +369,7 @@
             plot(asset_grid_ages,Vages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright ,lw=3)
             plot!(title = "Value Function", ylabel="", xlabel = "Asset Position")
             savefig(string("V_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
-            
+
             Cages = hcat( ms.C[pltages[1],1,1:top_A,ei,zi],ms.C[pltages[2],1,1:top_A,ei,zi],ms.C[pltages[3],1,1:top_A,ei,zi], ms.C[pltages[4],1,1:top_A,ei,zi] );
             plot(asset_grid_ages,Cages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "Consumption", ylabel="", xlabel = "Asset Position")
@@ -381,7 +390,7 @@
             plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "A' policy", ylabel="a'", xlabel = "Asset Position")
             savefig(string("Ap_ages_phi",ϕ_2,"_zi",zi,"_ei",ei,".png"))
-            
+
             Bages = hcat( ms.B[pltages[1],1,1:top_A,ei,zi],ms.B[pltages[2],1,1:top_A,ei,zi],ms.B[pltages[3],1,1:top_A,ei,zi], ms.B[pltages[4],1,1:top_A,ei,zi] );
             plot(asset_grid_ages,Apages,label=["Young" "Middle" "Earnings Peak" "Near Retirement"],legend=:bottomright, lw=3)
             plot!(title = "B policy", ylabel="b", xlabel = "Asset Position")
