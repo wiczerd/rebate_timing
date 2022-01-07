@@ -16,6 +16,11 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
     end
     mod.asset_grid = assetGrid(N_ages,mod.Ygrid,N_a,ms.Q0, mod.asset_grid,mod.r, grid_curvature );
 
+    max_age = zeros(N_ages)
+    for t=1:N_ages 
+        max_age[t] = maximum(mod.asset_grid[t,:]);
+    end 
+
     #=  Another Q initialization? 
     Tried to initialize with some delinquency built in
     for t=1:N_ages
@@ -35,8 +40,6 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
     #median quarterly income: ~ 3.0, in data it's 68,703/4 = 17175.75
     # => 1200/17175.75
     mod.transfer_grid[2] = 0.21; mod.transfer_grid[3] = 0.419;
-
-
 
 
     #++++++++++++++++++++++++++++++++++++++++++

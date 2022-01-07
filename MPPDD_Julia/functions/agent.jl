@@ -153,20 +153,22 @@ end
 Define current utility + continuation value
 """
 function bobjective(b::Float64, s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64,1}, #
-    atp_grid::Array{Float64,1}, a::Float64, t::Int64, EVp_spn:: Array{Float64,1}, #Schumaker, #
+    atp_grid::Array{Float64,1}, a::Float64, t::Int64, EVp_spn::Array{Float64,1}, #Schumaker, #
     reclaimrate::Float64, ψ::Float64, β::Float64, ϕ_1::Float64, ϕ_2::Float64, ϕ_3::Float64, γ::Int64)::Float64
     # Note: b, s, y, ψ are levels.
 
     # Get level of capital implied by next-period consumption choice
     ap = b + (1.0 - s)*a*reclaimrate;
 
-    EVp= LinearInterpolation(atp_grid, EV_spn)(ap); #SchumakerSpline.evaluate(EVp_spn,ap) ; #
+    EVp= LinearInterpolation(atp_grid, EVp_spn,extrapolation_bc=Line())(ap); #SchumakerSpline.evaluate(EVp_spn,ap) ; #
     q_ap = max( SchumakerSpline.evaluate(q_spn,ap) , 0.0); #max( CubicSplineInterpolation(atp_grid, q_spn)(ap) , 0.0);
 
     if ap>atp_grid[length(atp_grid)] || ap<atp_grid[1]
-        println("ap out of bounds: (ap,b,s,a)= ($ap, $b, $s, $a)");
+        if print_lev>0
+            println("ap out of bounds: (ap,b,s,a)= ($ap, $b, $s, $a)");
+        end 
         ap0 = ap<atp_grid[1] ? atp_grid[1] : atp_grid[length(atp_grid)]
-        EVp=  LinearInterpolation(atp_grid, EV_spn)(ap); # SchumakerSpline.evaluate(EVp_spn,ap0) - (ap-ap0)^2;
+        EVp=  LinearInterpolation(atp_grid, EVp_spn,extrapolation_bc=Line())(ap); # SchumakerSpline.evaluate(EVp_spn,ap0) - (ap-ap0)^2;
         q_ap = max( SchumakerSpline.evaluate(q_spn,ap0) , 0.0);
 
     end
@@ -175,7 +177,9 @@ function bobjective(b::Float64, s::Float64, y::Float64, q_spn::Schumaker, #Array
     util_penalty = 0.0;
     if c<1e-7
         util_penalty = (c-1e-7)^2;
-        println("negative c with b as $b and c as $c");
+        if print_lev >0
+            println("negative c with b as $b and c as $c");
+        end
         c=1e-7;
     end
     #return u(c,cbar, γ, ϕ_1, ϕ_2, ϕ_3) - util_penalty - ϕ(s, ϕ_1, ϕ_2, ϕ_3) + β*ψ*EVp
@@ -223,7 +227,7 @@ function max_bobjective(s::Float64, y::Float64, q_spn::Schumaker, #Array{Float64
 end
 
 
-function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float64,1},EVp_spn::Array{Float64,1}, #Schumaker, 
+function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float64,1},EVp_spn::Array{Float64,1}, #Schumaker,
     N_a::Int64, zi::Int64, εi::Int64,ai::Int64,t::Int64,ψ::Float64,q_spn::Schumaker)::Tuple{Float64,Float64,Float64,Float64,Float64}  # qhr::Array{Float64,1})::Tuple{Float64,Float64,Float64,Float64,Float64}
 
     a0hr = a0[ai];
@@ -247,7 +251,9 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
             #println("bmin > bmax: $bmin > $bmax at $t, $ai, and $a0hr")
             bopt = bmin;
             vopt = bobjective(bopt, sopt, y, q_spn, atp, a0hr, t, EVp_spn, mod.reclaimrate,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ);
-             println("bmin > bmax: $bmin > $bmax with $vopt, $bopt")
+            if print_lev>0
+                println("bmin > bmax: $bmin > $bmax with $vopt, $bopt")
+            end
 
         else
             b_solution_struct::Optim.OptimizationResults = optimize(b -> -1*bobjective(b, sopt, y, q_spn, atp, a0hr, t,EVp_spn, mod.reclaimrate,ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ), bmin, bmax);
@@ -256,7 +262,11 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
         end
     else
         smax = 1.0;
-        qhr1 = SchumakerSpline.evaluate(q_spn,atp[1]);
+		#if constQ == true
+		#    qhr1 = q_spn[1];
+		#else
+		    qhr1 = SchumakerSpline.evaluate(q_spn,atp[1]);
+		#end
         if y+ a0hr - qhr1 *( atp[1]-a0hr ) <= 0 #consumption in this case
             #have to default a little bit:
             smax = min(1.0,  (1e-6 - y + qhr1*atp[1]-qhr1*a0hr)/(a0hr - a0hr*qhr1)  )
@@ -281,12 +291,16 @@ function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float6
     Apopt = bopt + (1.0 - sopt)*a0[ai]*mod.reclaimrate;
     if Apopt > atp[N_a] || Apopt < atp[1]
         at1 = atp[1];
-        println("Outside of A grid at $t, $ai, $εi, $zi : $Apopt < $at1 and $bopt, $sopt");
+        if print_lev>0
+            println("Outside of A grid at $t, $ai, $εi, $zi : $Apopt < $at1 and $bopt, $sopt");
+        end 
         #return V, B, C, S, Ap;
         Apopt = Apopt > atp[N_a] ? atp[N_a] : Apopt > atp[1]
     end
 
     copt = y + a0[ai]*sopt - SchumakerSpline.evaluate(q_spn,Apopt)*bopt ;
+
+
 
     return vopt,sopt,bopt,copt, Apopt
 end
@@ -343,12 +357,17 @@ function backwardSolve!(ms::sol, mod::model,
                 end
 
                 #EVp_spn = Schumaker(atp,EVp_grid);
-                q_spn = Schumaker(atp,qhr);
+				#if constQ == true
+				#	  q_spn = qhr;
+				#else
+					  q_spn = Schumaker(atp,qhr);
+			    #end
 
                 @inbounds for εi = 1:N_ε
                     y = mod.Ygrid[t, εi, zi] + transf;
 
-                    @inbounds Threads.@threads for  ai = 1:N_a #loop over a0
+                    #@inbounds Threads.@threads for  ai = 1:N_a #loop over a0
+                    for  ai = 1:N_a #loop over a0
 
                         # With stochastic aging, not a thing:
                         # Right before certain death, the agent chooses to consume all that they can
@@ -363,6 +382,24 @@ function backwardSolve!(ms::sol, mod::model,
 
                         (vopt,sopt,bopt,copt, Apopt) = solve_ai(mod,y,atp,a0,EVp_grid, #EVp_spn,
                                     N_a,zi,εi,ai,t,ψ,q_spn);
+
+                                    # save the whole frontier of b choices
+                        if debug_saves==1 && tri==1
+                            for api=1:N_a 
+                                bhr =  atp[api] - (1.0 - sopt)*a0[ai]*mod.reclaimrate;
+                                ms.B_frontier[t, ai, εi, zi,1,api] = bhr
+                                ms.V_frontier[t, ai, εi, zi,1,api] =  bobjective(bhr, sopt, y, q_spn,atp, a0[ai], t, EVp_grid, mod.reclaimrate, ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ)
+                                # full repay
+                                ms.B_frontier[t, ai, εi, zi,2,api] =  atp[api];
+                                ms.V_frontier[t, ai, εi, zi,2,api] =  bobjective(atp[api], sopt, y, q_spn,atp, a0[ai], t, EVp_grid, mod.reclaimrate, ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ)
+                                #full default 
+                                if a0[ai] <0
+                                    bhr =  atp[api] - a0[ai]*mod.reclaimrate;
+                                    ms.B_frontier[t, ai, εi, zi,3, api] = bhr
+                                    ms.V_frontier[t, ai, εi, zi,3, api] =  bobjective(bhr, sopt, y, q_spn,atp, a0[ai], t, EVp_grid, mod.reclaimrate, ψ, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, γ)
+                                end
+                            end
+                        end
 
                         ms.V[t, tri, ai, εi, zi] = vopt;
                         ms.S[t, tri, ai, εi, zi] = sopt;
