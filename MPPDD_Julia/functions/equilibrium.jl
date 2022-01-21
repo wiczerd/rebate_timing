@@ -45,10 +45,10 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
     #++++++++++++++++++++++++++++++++++++++++++
     # use last Q as a guess or go back to our initial one?
     rlow  =-0.025;
-    rhigh = 2*mod.r - rlow;
+    rhigh = max(2*mod.r - rlow, 0.04);
 
 
-    for qiter = 1:maxiterq
+    for qiter = 1:15
        
         @time backwardSolve!(ms,mod, N_ages, N_a, N_z, N_ε, ms.Q0);
         excessdemand =0.0;

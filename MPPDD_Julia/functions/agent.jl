@@ -228,7 +228,8 @@ end
 
 
 function solve_ai( mod::model, y::Float64,atp::Array{Float64,1},a0::Array{Float64,1},EVp_spn::Array{Float64,1}, #Schumaker,
-    N_a::Int64, zi::Int64, εi::Int64,ai::Int64,t::Int64,ψ::Float64,q_spn::Schumaker)::Tuple{Float64,Float64,Float64,Float64,Float64}  # qhr::Array{Float64,1})::Tuple{Float64,Float64,Float64,Float64,Float64}
+    N_a::Int64, zi::Int64, εi::Int64,ai::Int64,t::Int64,ψ::Float64,q_spn::Schumaker #Array{Float64,1}
+    )::Tuple{Float64,Float64,Float64,Float64,Float64}  # qhr::Array{Float64,1})::Tuple{Float64,Float64,Float64,Float64,Float64}
 
     a0hr = a0[ai];
 
@@ -381,7 +382,8 @@ function backwardSolve!(ms::sol, mod::model,
                         end
 
                         (vopt,sopt,bopt,copt, Apopt) = solve_ai(mod,y,atp,a0,EVp_grid, #EVp_spn,
-                                    N_a,zi,εi,ai,t,ψ,q_spn);
+                                    N_a,zi,εi,ai,t,ψ, q_spn #qhr #
+                                    );
 
                                     # save the whole frontier of b choices
                         if debug_saves==1 && tri==1
@@ -442,14 +444,14 @@ function draw_shocks!(mod::model, ht::hists,seed::Int64=12281951)
     cumεprobs = zeros(N_ages,N_ε+1);
     cumzprobs = zeros(N_ages,N_z,N_z+1);
     cumzergod = zeros(N_ages,N_z+1);
-    for t=1:N_ages
-        cumεprobs[t,2:(N_ε+1)] .= cumsum(mod.εprobs[t,:]);
+    for agei=1:N_ages
+        cumεprobs[agei,2:(N_ε+1)] .= cumsum(mod.εprobs[agei,:]);
         for zi=1:N_z
-            cumzprobs[t,zi,2:(N_z+1)] .= cumsum(mod.zprobs[t,zi,:]);
+            cumzprobs[agei,zi,2:(N_z+1)] .= cumsum(mod.zprobs[agei,zi,:]);
         end
-        if t>1
-            zergod_t = mod.zprobs[t,:,:]^(1000*freq);
-            cumzergod[t,2:(N_z+1)] .= cumsum(zergod_t[1,:]);
+        if agei>1
+            zergod_agei = sum(mod.zprobs[agei,:,:]^(10000*freq) ,dims=1)/N_z;
+            cumzergod[agei,2:(N_z+1)] .= cumsum(zergod_agei[1,:]);
         else
             cumzergod[1,2:(N_z+1)] .= cumsum(ones(N_z)./N_z );
         end
@@ -469,152 +471,156 @@ function draw_shocks!(mod::model, ht::hists,seed::Int64=12281951)
     end
 end
 
+function sim_agent!(i::Int,t0::Int,age0::Int, a0::Float64, ei0::Int, zi0::Int, 
+    mod::model, ht::hists, ms::sol, mmt::moments,N_ages::Int64, N_a::Int64,N_z::Int64, N_ε::Int64)
+
+
+    it= t0;
+    ei_hr = ei0;
+    zi_hr = zi0;
+    if age0 > 0 && age0 < N_ages
+        age_hr=  age0-1;
+    else 
+        age_hr=  ht.agehist[i,it];
+    end 
+    # Initialize
+    ht.ahist[i,it] = a0
+    
+    @inbounds for it=t0:(Thist*freq)
+        
+        if age0 >= 0 && age0 < N_ages
+            age_hr = age_hr + 1 <=N_ages ? age_hr + 1 : 1
+        else 
+            age_hr=  ht.agehist[i,it];
+        end 
+        
+        aL = 1; aLwt = 0.0;
+        #if age_hr > 1
+            aL = sum( ht.ahist[i,it] .>=  mod.asset_grid[age_hr,:] );
+            aL = aL>= N_a ? N_a-1 : (aL <1 ? 1 : aL);
+            aLwt =  (mod.asset_grid[age_hr,aL+1] - ht.ahist[i,it])/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
+        
+        if it<=(Thist*freq - 1)
+            ap = aLwt*ms.Ap[age_hr,1,aL,ei_hr,zi_hr ] +
+                (1.0 - aLwt)*ms.Ap[ age_hr,1,aL+1,ei_hr,zi_hr ];
+            ht.ahist[i,it+1] = ap;
+            apL = sum( ap .>=  mod.asset_grid[age_hr,:] );
+            apL = apL>= N_a ? N_a-1 : (apL <1 ? 1 : apL);
+            apLwt =  (mod.asset_grid[age_hr,aL+1] - ap)/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
+            ht.qhist[i,it] = apLwt*ms.Q0[age_hr,zi_hr,apL] +
+                (1.0 - apLwt)*ms.Q0[age_hr,zi_hr,apL+1];
+        end
+        ht.chist[i,it] = aLwt*ms.C[age_hr,1,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.C[age_hr,1,aL+1,ei_hr,zi_hr];
+
+        ht.shist[i,it] = aLwt*ms.S[age_hr,1,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.S[age_hr,1,aL+1,ei_hr,zi_hr];
+        if ht.shist[i,it] <.98 && ht.ahist[i,it] >0
+            shr = ht.shist[i,it];
+            ahr = ht.ahist[i,it];
+            #println("With age $age_hr, wrong s,a: $shr,$ahr with aL,aLwt: $aL,$aLwt")
+            ht.shist[i,it] =1.0;
+        end
+        ht.bhist[i,it] = aLwt*ms.B[age_hr,1,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.B[age_hr,1,aL+1,ei_hr,zi_hr];
+
+        #compute mpc, mpd,mpb:
+        ht.mpbhist[1,i,it] = (aLwt*ms.B[age_hr,2,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.B[age_hr,2,aL+1,ei_hr,zi_hr] -
+            ht.bhist[i,it])/mod.transfer_grid[2]
+        ht.mpbhist[2,i,it] = (aLwt*ms.B[age_hr,3,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.B[age_hr,3,aL+1,ei_hr,zi_hr] -
+            ht.bhist[i,it])/mod.transfer_grid[3]
+
+        ht.mpchist[1,i,it] = (aLwt*ms.C[age_hr,2,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.C[age_hr,2,aL+1,ei_hr,zi_hr] -
+            ht.chist[i,it])/mod.transfer_grid[2]
+        ht.mpchist[2,i,it] = (aLwt*ms.C[age_hr,3,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.C[age_hr,3,aL+1,ei_hr,zi_hr] -
+            ht.chist[i,it])/mod.transfer_grid[3]
+
+        ht.mpshist[1,i,it] = mod.asset_grid[age_hr,aL+1] <= 0 ? (aLwt*ms.S[age_hr,2,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.S[age_hr,2,aL+1,ei_hr,zi_hr] -
+            ht.shist[i,it])/mod.transfer_grid[2] : 0.;
+        ht.mpshist[2,i,it] = mod.asset_grid[age_hr,aL+1] <= 0 ? (aLwt*ms.S[age_hr,3,aL,ei_hr,zi_hr] +
+            (1.0 - aLwt)*ms.S[age_hr,3,aL+1,ei_hr,zi_hr] -
+            ht.shist[i,it])/mod.transfer_grid[3] : 0.0
+
+        if it<=(Thist*freq - 1)
+            #a' = b + (1.0 - s) a
+            ap_tr2 = aLwt*ms.B[age_hr,2,aL,ei_hr,zi_hr] +
+                (1.0 - aLwt)*ms.B[age_hr,2,aL+1,ei_hr,zi_hr] +
+                (1.0 - aLwt*ms.S[age_hr,2,aL,ei_hr,zi_hr] -
+                (1.0 - aLwt)*ms.S[age_hr,2,aL+1,ei_hr,zi_hr])*ht.ahist[i,it];
+            apL = sum( ap_tr2 .>=  mod.asset_grid[age_hr,:] );
+            apL = apL>= N_a ? N_a-1 : (apL <1 ? 1 : apL);
+            apLwt =  (mod.asset_grid[age_hr,aL+1] - ap_tr2)/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
+            q_tr2 = apLwt*ms.Q0[age_hr,zi_hr,apL] +
+                (1.0 - apLwt)*ms.Q0[age_hr,zi_hr,apL+1];
+            ht.mpqhist[1,i,it] = (q_tr2 - ht.qhist[i,it])/mod.transfer_grid[2];
+
+            ap_tr3 = aLwt*ms.B[age_hr,3,aL,ei_hr,zi_hr] +
+                (1.0 - aLwt)*ms.B[age_hr,3,aL+1,ei_hr,zi_hr] +
+                (1.0 - aLwt*ms.S[age_hr,3,aL,ei_hr,zi_hr] -
+                (1.0 - aLwt)*ms.S[age_hr,3,aL+1,ei_hr,zi_hr])*ht.ahist[i,it];
+            apL = sum( ap_tr3 .>=  mod.asset_grid[age_hr,:] );
+            apL = apL>= N_a ? N_a-1 : (apL <1 ? 1 : apL);
+            apLwt =  (mod.asset_grid[age_hr,aL+1] - ap_tr3)/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
+            q_tr3 = apLwt*ms.Q0[age_hr,zi_hr,apL] +
+                (1.0 - apLwt)*ms.Q0[age_hr,zi_hr,apL+1];
+            ht.mpqhist[2,i,it] = (q_tr3 - ht.qhist[i,it])/mod.transfer_grid[3]
+        end
+        
+    end #end it=1:Tsim+burnin
+
+end
+
+
 function sim_hists!(mod::model, ht::hists, ms::sol, mmt::moments,N_ages::Int64, N_a::Int64,N_z::Int64, N_ε::Int64)
 
-    ithist = zeros(Nsim,Thist*freq);
-    asset_alpha = ones(N_ages,N_ε, N_z); asset_beta=ones(N_ages,N_ε, N_z);  #will iteratively fit a beta distribution
-    a95         = ones(N_ages,N_ε, N_z);
-    for dist_iter = 1:3
-
+    ithist = repeat( collect(1:Thist*freq)',Nsim,1 ) ;
+    Tsim0 = (Tburnin+1)*freq;
+    TsimT = (Tsim+Tburnin)*freq;
+    age_z_mean = zeros(N_ages,N_z);
+    Nhere = zeros(N_ages,N_z);
+    for dist_iter = 1:4
         @inbounds for i=1:Nsim
-            @inbounds for it=1:(Thist*freq)
-                ei_hr = ht.εidxhist[i,it];
-                zi_hr = ht.zidxhist[i,it];
-                age_hr=  ht.agehist[i,it];
-                ithist[i,it] = it;
-                if it==1 # Initialize
-                    a95_hr = a95[it,ei_hr,zi_hr];
-                    if age_hr >1 && asset_alpha[age_hr,ei_hr,zi_hr] > 0 && asset_beta[age_hr,ei_hr,zi_hr] > 0
-                        ht.ahist[i,1] = quantile(Beta(asset_alpha[age_hr,ei_hr,zi_hr],asset_beta[age_hr,ei_hr,zi_hr]),ht.a0qtlhist[i] )*(a95_hr - mod.asset_grid[age_hr,1]) + mod.asset_grid[age_hr,1];
-                    elseif age_hr==1 #young all go to the same place
-                        ht.ahist[i,1] = 0.0;
-                    elseif asset_alpha[age_hr,ei_hr,zi_hr] <=0 #if there was a degenerate distribution I stored the average as -asset_alpha
-                        ht.ahist[i,1] = -asset_alpha[age_hr,ei_hr,zi_hr]*(a95_hr - mod.asset_grid[age_hr,1]) + mod.asset_grid[age_hr,1];
-                    end
-                end  # end if it==1
-                aL = 1; aLwt = 0.0;
-                if age_hr > 1
-                    aL = sum( ht.ahist[i,it] .>=  mod.asset_grid[age_hr,:] );
-                    aL = aL>= N_a ? N_a-1 : (aL <1 ? 1 : aL);
-                    aLwt =  (mod.asset_grid[age_hr,aL+1] - ht.ahist[i,it])/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
-                else #for new-borns, start everyone with no assets or debt
-                    ht.ahist[i,it] = 0.0;
-                    aL = sum( ht.ahist[i,it] .>=  mod.asset_grid[age_hr,:] );
-                    aL = aL>= N_a ? N_a-1 : (aL <1 ? 1 : aL);
-                    aLwt =  (mod.asset_grid[age_hr,aL+1] - ht.ahist[i,it])/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
-                end
-                if it<=(Thist*freq - 1)
-                    ap = aLwt*ms.Ap[age_hr,1,aL,ei_hr,zi_hr ] +
-                        (1.0 - aLwt)*ms.Ap[ age_hr,1,aL+1,ei_hr,zi_hr ];
-                    ht.ahist[i,it+1] = ap;
-                    apL = sum( ap .>=  mod.asset_grid[age_hr,:] );
-                    apL = apL>= N_a ? N_a-1 : (apL <1 ? 1 : apL);
-                    apLwt =  (mod.asset_grid[age_hr,aL+1] - ap)/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
-                    ht.qhist[i,it] = apLwt*ms.Q0[age_hr,zi_hr,apL] +
-                        (1.0 - apLwt)*ms.Q0[age_hr,zi_hr,apL+1];
-                end
-                ht.chist[i,it] = aLwt*ms.C[age_hr,1,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.C[age_hr,1,aL+1,ei_hr,zi_hr];
-
-                ht.shist[i,it] = aLwt*ms.S[age_hr,1,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.S[age_hr,1,aL+1,ei_hr,zi_hr];
-                if ht.shist[i,it] <.98 && ht.ahist[i,it] >0
-                    shr = ht.shist[i,it];
-                    ahr = ht.ahist[i,it];
-                    #println("With age $age_hr, wrong s,a: $shr,$ahr with aL,aLwt: $aL,$aLwt")
-                    ht.shist[i,it] =1.0;
-                end
-                ht.bhist[i,it] = aLwt*ms.B[age_hr,1,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.B[age_hr,1,aL+1,ei_hr,zi_hr];
-
-                #compute mpc, mpd,mpb:
-                ht.mpbhist[1,i,it] = (aLwt*ms.B[age_hr,2,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.B[age_hr,2,aL+1,ei_hr,zi_hr] -
-                    ht.bhist[i,it])/mod.transfer_grid[2]
-                ht.mpbhist[2,i,it] = (aLwt*ms.B[age_hr,3,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.B[age_hr,3,aL+1,ei_hr,zi_hr] -
-                    ht.bhist[i,it])/mod.transfer_grid[3]
-
-                ht.mpchist[1,i,it] = (aLwt*ms.C[age_hr,2,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.C[age_hr,2,aL+1,ei_hr,zi_hr] -
-                    ht.chist[i,it])/mod.transfer_grid[2]
-                ht.mpchist[2,i,it] = (aLwt*ms.C[age_hr,3,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.C[age_hr,3,aL+1,ei_hr,zi_hr] -
-                    ht.chist[i,it])/mod.transfer_grid[3]
-
-                ht.mpshist[1,i,it] = mod.asset_grid[age_hr,aL+1] <= 0 ? (aLwt*ms.S[age_hr,2,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.S[age_hr,2,aL+1,ei_hr,zi_hr] -
-                    ht.shist[i,it])/mod.transfer_grid[2] : 0.;
-                ht.mpshist[2,i,it] = mod.asset_grid[age_hr,aL+1] <= 0 ? (aLwt*ms.S[age_hr,3,aL,ei_hr,zi_hr] +
-                    (1.0 - aLwt)*ms.S[age_hr,3,aL+1,ei_hr,zi_hr] -
-                    ht.shist[i,it])/mod.transfer_grid[3] : 0.0
-
-                if it<=(Thist*freq - 1)
-                    #a' = b + (1.0 - s) a
-                    ap_tr2 = aLwt*ms.B[age_hr,2,aL,ei_hr,zi_hr] +
-                        (1.0 - aLwt)*ms.B[age_hr,2,aL+1,ei_hr,zi_hr] +
-                        (1.0 - aLwt*ms.S[age_hr,2,aL,ei_hr,zi_hr] -
-                        (1.0 - aLwt)*ms.S[age_hr,2,aL+1,ei_hr,zi_hr])*ht.ahist[i,it];
-                    apL = sum( ap_tr2 .>=  mod.asset_grid[age_hr,:] );
-                    apL = apL>= N_a ? N_a-1 : (apL <1 ? 1 : apL);
-                    apLwt =  (mod.asset_grid[age_hr,aL+1] - ap_tr2)/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
-                    q_tr2 = apLwt*ms.Q0[age_hr,zi_hr,apL] +
-                        (1.0 - apLwt)*ms.Q0[age_hr,zi_hr,apL+1];
-                    ht.mpqhist[1,i,it] = (q_tr2 - ht.qhist[i,it])/mod.transfer_grid[2];
-
-                    ap_tr3 = aLwt*ms.B[age_hr,3,aL,ei_hr,zi_hr] +
-                        (1.0 - aLwt)*ms.B[age_hr,3,aL+1,ei_hr,zi_hr] +
-                        (1.0 - aLwt*ms.S[age_hr,3,aL,ei_hr,zi_hr] -
-                        (1.0 - aLwt)*ms.S[age_hr,3,aL+1,ei_hr,zi_hr])*ht.ahist[i,it];
-                    apL = sum( ap_tr3 .>=  mod.asset_grid[age_hr,:] );
-                    apL = apL>= N_a ? N_a-1 : (apL <1 ? 1 : apL);
-                    apLwt =  (mod.asset_grid[age_hr,aL+1] - ap_tr3)/(mod.asset_grid[age_hr,aL+1] - mod.asset_grid[age_hr,aL])
-                    q_tr3 = apLwt*ms.Q0[age_hr,zi_hr,apL] +
-                        (1.0 - apLwt)*ms.Q0[age_hr,zi_hr,apL+1];
-                    ht.mpqhist[2,i,it] = (q_tr3 - ht.qhist[i,it])/mod.transfer_grid[3]
-                end
-            end #end it=1:Tsim+burnin
+            age_hr = ht.agehist[i,1];
+            ei_hr = ht.εidxhist[i,1];
+            zi_hr = ht.zidxhist[i,1];
+            #a95_hr = a95[it,ei_hr,zi_hr];
+            if age_hr >1 && dist_iter>1
+                idraw = max(min(floor(Int,ht.a0qtlhist[i]*(Nsim+1))+1,Nsim),1);
+                tdraw = max(min(floor(Int,i*Tsim*freq + Tburnin*freq )+ 1,Tsim*freq),1) ;
+                age_draw = ht.agehist[idraw,tdraw]
+                zi_draw   = ht.zidxhist[idraw,tdraw]
+                a0 = age_z_mean[age_hr,zi_hr] + (ht.ahist[age_draw,zi_draw] - age_z_mean[age_draw,zi_draw])
+            elseif age_hr==1 #young all go to the same place
+                a0 = 0.0;
+            else
+                rand_i = max(min(floor(Int,ht.a0qtlhist[i]*(N_a+1)),N_a ), 1)
+                a0 = mod.asset_grid[age_hr,rand_i];
+                #a0 = 0.0;
+            end
+            sim_agent!(i,1,-1, a0, ei_hr, zi_hr, mod, ht, ms, mmt,N_ages, N_a,N_z, N_ε)
+            
         end #end i =1:Nsim
 
         # update asset_alpha, asset_beta
-        for t=1:N_ages
-            for ei=1:N_ε
-                for zi=1:N_z
-                    mask_hr = (ht.εidxhist.==ei) .& (ht.zidxhist.==zi) .& (ht.agehist .== t) .& (ithist .>= (Tburnin*freq));
-                    if(sum(mask_hr)>0)
-
-                        a95[t,ei,zi] = quantile( ht.ahist[mask_hr],.95 );
-                        ahist_hr = (ht.ahist[mask_hr] .- mod.asset_grid[t,1])./(a95[t,ei,zi] - mod.asset_grid[t,1]);
-                        ahist_hr[ahist_hr .> 1.] .= 1;
-                        Ea_hr = 0.5; Va_hr = 0.0;
-                        #masktot = sum(mask_hr)
-                        #println("masktot $masktot")
-                        Ea_hr = mean(ahist_hr);
-                        Va_hr = var(ahist_hr);
-                    else
-                        Va_hr = 0.
-                    end
-                    #if Ea_hr<=0 || Va_hr<0 || isnan(Ea_hr) || isnan(Va_hr)
-                    #    println(" Ea_hr,Va_hr, t = $Ea_hr, $Va_hr, $t, $ei, $zi ");
-                    #end
-                    if Va_hr>0 && !isnan(Va_hr)
-                        asset_alpha[t,ei,zi] =      Ea_hr *(Ea_hr*(1.0-Ea_hr)/Va_hr-1.0);
-                        asset_beta[t,ei,zi]  = (1.0-Ea_hr)*(Ea_hr*(1.0-Ea_hr)/Va_hr-1.0);
-                    else #in the case where everyone goes to the same place:
-                        Ea_hr = (mean(ht.ahist[mask_hr])- mod.asset_grid[t,1])/(mod.asset_grid[t,N_a] - mod.asset_grid[t,1]);
-                        if(isnan(Ea_hr))
-                            asset_alpha[t,ei,zi] = 1.0;
-                        else
-                            asset_alpha[t,ei,zi] = Ea_hr/(1.0-Ea_hr);
-                        end
-                        asset_beta[t,ei,zi]  = 1.0;
-                    end
+        for t=2:N_ages
+            for zi=1:N_z
+                mask_hr = (ht.zidxhist.==zi) .& (ht.agehist .>= t-2) .& (ht.agehist .<= t+2) .& (ithist .> (Tburnin*freq));
+                Nhere[t,zi] = sum(mask_hr) 
+                if(sum(mask_hr)>0)
+                    age_z_mean[t,zi] = mean(ht.ahist[mask_hr]);
+                else
+                    age_z_mean[t,zi]= age_z_mean[t-1,zi] ;
                 end
+                
             end
         end
-        asset_alpha_t1 = mean(asset_alpha[:,2,2]);
-        asset_beta_t1 = mean(asset_beta[:,2,2]);
-        println("Asset α = $asset_alpha_t1, β=$asset_beta_t1");
+        avg_avg = mean(age_z_mean);
+        println("average asset is $avg_avg")
     end #iterated simulations
 
     #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -636,8 +642,6 @@ function sim_hists!(mod::model, ht::hists, ms::sol, mmt::moments,N_ages::Int64, 
     mmt.avg_income_neg_asset = 0.0;
     mmt.mpc_ac0 = 0.0;
 
-    Tsim0 = (Tburnin+1)*freq;
-    TsimT = (Tsim+Tburnin)*freq;
 
     MPCs_negassets = ones(Nsim*(TsimT-Tsim0+1),6)
     MPCs_posassets = ones(Nsim*(TsimT-Tsim0+1),3)
