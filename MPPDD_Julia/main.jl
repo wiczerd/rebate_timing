@@ -18,10 +18,10 @@ using Distributed
 using ClusterManagers
 
 const nworkers = 40*4;
-addprocs_slurm(nworkers,partition="long-40core",nodes=4, time="16:50:00",mem="150GB");
+#addprocs_slurm(nworkers,partition="long-40core",nodes=4, time="16:50:00",mem="150GB");
 #when running on the RAN cluster
 #addprocs_frbny(nworkers);
-
+addprocs(8);
 
 @everywhere begin 
     using Distributed
@@ -58,20 +58,25 @@ end
         B::Array{Float64,5}    # defined for (N_ages,N_t,N_a,N_ε, N_z)
         Ap::Array{Float64,5}   # defined for (N_ages,N_t,N_a,N_ε, N_z)
         Q0::Array{Float64,3}   # defined for (N_ages,N_z,N_a) known states
-        
+        V_frontier::Array{Float64,6}   # defined for (N_ages,N_a,N_ε, N_z, sidx,N_a)
+        B_frontier::Array{Float64,6}   # defined for (N_ages,N_a,N_ε, N_z, sidx, N_a)
         Aεz_dist::Array{Float64,4} #Equilibrium distribution across state (N_ages,a,z,ε)
     end
 
     function sol()
-        V  = zeros(N_ages+1,N_t,N_a,N_ε, N_z);
-        C  = zeros(N_ages,N_t,N_a,N_ε, N_z);
-        S  = zeros(N_ages,N_t,N_a,N_ε, N_z);
-        B  = zeros(N_ages,N_t,N_a,N_ε, N_z);
-        Ap = zeros(N_ages,N_t,N_a,N_ε, N_z);
-        Q0 = zeros(N_ages, N_z,N_a);
-        Aεz_dist = zeros(N_ages,N_a,N_ε,N_z);
-        return sol(V,C,S,B,Ap,Q0,Aεz_dist)
-    end 
+        V  = zeros(N_ages+1,N_t,N_a,N_ε, N_z); #value function
+        C  = zeros(N_ages,N_t,N_a,N_ε, N_z);   #consumption
+        S  = zeros(N_ages,N_t,N_a,N_ε, N_z);   # pay back rate
+        B  = zeros(N_ages,N_t,N_a,N_ε, N_z);   # change in asset position
+        Ap = zeros(N_ages,N_t,N_a,N_ε, N_z);   # asset position tomorrow
+        Q0 = zeros(N_ages, N_z,N_a);           # interest rate function
+        V_frontier= zeros(N_ages,N_a,N_ε, N_z, 3,N_a);   
+        B_frontier= zeros(N_ages,N_a,N_ε, N_z, 3,N_a);   
+        Aεz_dist = zeros(N_ages,N_a,N_ε,N_z);  # distribution over states
+
+
+        return sol(V,C,S,B,Ap,Q0,V_frontier,B_frontier,Aεz_dist)
+    end
 
     mutable struct model
         zprobs::Array{Float64,3}
@@ -82,17 +87,17 @@ end
         asset_grid::Array{Float64,2}
         cbar::Float64
         γ::Int64
-        ϕ_1::Float64 #average cost level 
-        ϕ_2::Float64 # curvature 
+        ϕ_1::Float64 #average cost level
+        ϕ_2::Float64 # curvature
         ϕ_3::Float64 # fixed costs
+        reclaimrate::Float64 #h in the model... the fraction not taken by haircut
         r::Float64
         β::Float64
         λ::Float64
         transfer_grid::Array{Float64,1}
 
-        model() = (modd = new(); modd.cbar = 0.0; modd.γ =1; return modd)
+        model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.γ =1; return modd)
     end
-
 
     mutable struct hists
         #histories for:
@@ -112,7 +117,6 @@ end
         mpqhist::Array{Float64,3}
 
         a0qtlhist::Array{Float64,1} #quantile of a in the asset distribution for first period.
-
     end
 
     function hists()
@@ -130,13 +134,13 @@ end
         mpshist   = Array{Float64,3}(undef,2,Nsim,Thist*freq);
         mpbhist   = Array{Float64,3}(undef,2,Nsim,Thist*freq);
         mpqhist   = Array{Float64,3}(undef,2,Nsim,Thist*freq);
+
         return hists(chist,bhist,
             shist,ahist,qhist,εidxhist,
             zidxhist,agehist,incomehist,
             mpchist,mpshist,mpbhist,mpqhist,a0qtlhist)
-    end 
+    end
 
-    
     mutable struct moments
         #moments from the simulation to return
         fr_neg_asset::Float64
@@ -150,8 +154,7 @@ end
         mpc_cor_neg_asset::Array{Float64,2}
         mpc_cor_pos_asset::Array{Float64,2}
         mpc_ac0 :: Float64
-    
-    end 
+    end
 
     function moments()
         #constructor for moments
@@ -168,7 +171,6 @@ end
         mpc_ac0 = 0.0
 
         return moments(fr_neg_asset,avg_indiv_debt_income,avg_debt,avg_income,avg_income,extent_delinq,avg_s,fr_s1,mpc_cor_neg_asset,mpc_cor_pos_asset,mpc_ac0)
-
     end
 
 
@@ -185,13 +187,17 @@ end
     const freq         = 4; # 1=annual, 4=quarterly
     const γ            = 1;
 
+    const debug_saves  = 0; # should we save stuff for debugging? If 1, then yes.
+    print_lev = 0;
 
     ## State space
 
-    const N_a          = 40;    # Number of asset states, 40-50
+    const N_a          = 60;    # Number of asset states, 40-50
     const N_z          = 5;      # Number of permanent income states, 7-10
     const N_ε          = 4;         # Number of transitory income states, 5-21
     const N_t          = 3;      # Number of transfer levels
+
+    const grid_curvature = 2.0;  #unevenly spaced grid points. >0 means more close to 0
 
     ## Income Process  - from Kaplan & Violante (2010)
     ρ          =  1.0;
@@ -216,18 +222,27 @@ end
     const N_ages = (YrsT-Yrs0+1)*freq;
     const age_retire = (Yrs_retire-Yrs0+1) * freq;
     const ageprobs = ones(N_ages+1); #vcat(ones(N_ages-1)*(N_ages-1.0)/(T_retire - T0)/freq, 1.0/(T-T_retire)/freq );
-
+    const agegrid = collect(LinRange(1, N_ages, N_ages));
     ## Agents begin at  age 25, die at 95, retire at 65
 
     # Survival Probabilities
     const survivalprobs = ones(N_ages); # N_ages set to 0 in agent.jl
 
+
+	const fixedassetgrid = false;
+	const unevengrid = true;
+	const natborrowlimit = true;
+
+    constQ = false; #set q = 1/(1+r) or every debt level
+    fullcommit = false; # do not allow s<1, which also implies constQ
+
+
+
+    print("Done defining constants.")
     """
-    Takes in parameters, outputs moments / parameters to CSV 
+    Takes in parameters, outputs moments / parameters to CSV
     """
-    function params_moments(iofilename, vals, j)
-        parval   = vals[j];
-        
+    function params_moments(iofilename, parval, j)
         ht = hists();
 
         mod      = model();
@@ -237,6 +252,7 @@ end
         mod.ϕ_2  = parval[:ϕ_2];
         mod.ϕ_3  = parval[:ϕ_3];
         mod.λ  = parval[:λ];
+        mod.reclaimrate = parval[:reclaimrate];
 
         mmt = moments();
         age_peak       = (Yrs_retire-10)*freq; # corresponds to 50-55, at which income peaks
@@ -252,27 +268,52 @@ end
         println("Drawing shocks on PID $pidnum, $workernum at j $j !");
         draw_shocks!(mod,ht, 12281951);
 
-        println("Solving on PID $pidnum, $workernum at j $j !");
-        # optionally, test the timing of this to see how things output
-        #sleep(ceil(Int,rand()*5))
+        #to get no commitment, const Q:
+        saveloc = string(saveroot,"modEnvr_commitment",j,".jld");
+        @load saveloc mod;
+        saveloc = string(saveroot,"solMats_constQ",j,".jld");
+        @load saveloc ms;
+
+
+        #first do it with full commitment
+        fullcommit_old = fullcommit;
+        global fullcommit = true;
+        #sets the interest rate to market clearing
         ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
+        saveloc = string(saveroot,"modEnvr_commitment",j,".jld");
+        @save saveloc mod;
+        saveloc = string(saveroot,"solMats_commitment",j,".jld");
+        @save saveloc ms;
+        global fullcommit = fullcommit_old;
+        constQ_old = constQ;
+        global constQ
+        # now save the constQ version for completeness:
+        @time backwardSolve!(ms,mod, N_ages, N_a, N_z, N_ε, ms.Q0);
+        saveloc = string(saveroot,"solMats_constQ",j,".jld");
+        @save saveloc ms;
         
-        saveloc = string(saveroot,"modEnvr_p",j,".jld")
-        @save saveloc mod
-        saveloc = string(saveroot,"solMats_p",j,".jld")
-        @save saveloc ms
         
-        sim_hists!(mod, ht, ms, mmt, N_ages, N_a,N_z, N_ε);
-        
-        #saveloc = string(saveroot,"simHists_p",j,".jld")
-        #@save saveloc ht
-        #saveloc = string(saveroot,"eqmQ_p",j,".jld")
-        #@save saveloc ms.Q0
-        saveloc = string(saveroot,"mmts_p",j,".jld")
-        @save saveloc mmt
-        
+        if fullcommit==false
+            ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
+            println("Starting to save")
+            j=1;
+            saveloc = string(saveroot,"modEnvr_p",j,".jld")
+            @save saveloc mod
+            saveloc = string(saveroot,"solMats_p",j,".jld")
+            @save saveloc ms
+            println("About to sim_hists")
+            sim_hists!(mod, ht, ms, mmt, N_ages, N_a,N_z, N_ε);
+            println("Done sim_hists")
+            saveloc = string(saveroot,"simHists_p",j,".jld")
+            @save saveloc ht
+            saveloc = string(saveroot,"eqmQ_p",j,".jld")
+            @save saveloc ms.Q0
+            saveloc = string(saveroot,"mmts_p",j,".jld")
+            @save saveloc mmt
+            println("Done saving..")
+        end
         outvec = reshape([j, mod.r, mod.β, mod.ϕ_1, mod.ϕ_2, mod.ϕ_3, mod.λ , mmt.fr_neg_asset, mmt.avg_debt,mmt.avg_s, mmt.extent_delinq,mmt.fr_s1, mmt.avg_income,mmt.avg_income_neg_asset,mmt.mpc_ac0],1,Nparams+Nmoments+1 );
-        
+
         iohr = open(iofilename,"a")
         writedlm(iohr, round.(outvec,digits=5), ',')
         close(iohr);
@@ -338,8 +379,7 @@ function estimate_elasticities(param_grids::OrderedDict{Symbol,Array{Float64,1}}
 
     parvals = OrderedDict{Int64, OrderedDict{Symbol,Float64}}()
     i =1;
-    for ω in values(param_grids[:ω]), β in values(param_grids[:β]), ϕ_1 in values(param_grids[:ϕ_1]), ϕ_2 in values(param_grids[:ϕ_2]), ϕ_3 in values(param_grids[:ϕ_3]), λ in values(param_grids[:λ])
-        
+    for ω in values(param_grids[:ω]), β in values(param_grids[:β]), ϕ_1 in values(param_grids[:ϕ_1]), ϕ_2 in values(param_grids[:ϕ_2]), ϕ_3 in values(param_grids[:ϕ_3]), λ in values(param_grids[:λ], recrate in values(param_grids[:recrate]))
         β_f = β^(1/freq); # correct for frequency of model
         temp = OrderedDict{Symbol, Float64}(
                     :β => β_f,
@@ -347,7 +387,8 @@ function estimate_elasticities(param_grids::OrderedDict{Symbol,Array{Float64,1}}
                     :ϕ_2 => ϕ_2,
                     :ϕ_3 => ϕ_3,
                     :r =>   (1/β_f-1)*(1-ω),
-                    :λ =>   λ)
+                    :λ =>   λ,
+                    :recrate => recrate);
         push!(parvals, i => temp)
         i+=1
     end
@@ -372,6 +413,7 @@ param_grids  = OrderedDict{Symbol,Array{Float64,1}}([
         (:ϕ_1,[0.01, 0.1, 0.3]),
         (:ϕ_2, [1.25, 2.0, 4, 5.5]),
         (:ϕ_3, [0.0, 0.1, 0.2]),
+        (:recrate, [0.9, 1.0]),
         (:λ , collect(LinRange(0.0, 0.06, 3))) ]);
 
 estimate_elasticities(param_grids)
