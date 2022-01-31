@@ -641,7 +641,7 @@ function sim_hists!(mod::model, ht::hists, ms::sol, mmt::moments,N_ages::Int64, 
     mmt.avg_debt = 0.0;
     mmt.avg_income_neg_asset = 0.0;
     mmt.mpc_ac0 = 0.0;
-
+    mmt.net_asset_supply = 0.0;
 
     MPCs_negassets = ones(Nsim*(TsimT-Tsim0+1),6)
     MPCs_posassets = ones(Nsim*(TsimT-Tsim0+1),3)
@@ -649,6 +649,7 @@ function sim_hists!(mod::model, ht::hists, ms::sol, mmt::moments,N_ages::Int64, 
     idx_pos::Int64 = 0
     @inbounds for i=1:Nsim
         @inbounds for it=Tsim0:TsimT
+            mmt.net_asset_supply += ht.ahist[i,it]
             if ht.ahist[i,it] < 0.0
             #    println("negative assets! $i, $it")
                 mmt.fr_neg_asset =  1.0 + mmt.fr_neg_asset ;
@@ -680,14 +681,23 @@ function sim_hists!(mod::model, ht::hists, ms::sol, mmt::moments,N_ages::Int64, 
         end
     end
 
-
-    mmt.avg_income = mean(ht.incomehist);
-    mmt.avg_income_neg_asset = mmt.avg_income_neg_asset / mmt.fr_neg_asset;
-    mmt.avg_indiv_debt_income = mmt.avg_indiv_debt_income/mmt.fr_neg_asset;
-    mmt.avg_s = mmt.avg_s/mmt.fr_neg_asset;
-    mmt.fr_s1 = mmt.fr_s1/mmt.fr_neg_asset;
-    mmt.avg_debt = mmt.avg_debt/mmt.fr_neg_asset;
-    mmt.extent_delinq = mmt.extent_delinq/mmt.fr_neg_asset;
+    mmt.net_asset_supply = mmt.net_asset_supply/(Nsim*(TsimT-Tsim0+1));
+    mmt.avg_income = mean(ht.incomehist[:,Tsim0:TsimT]);
+    if(mmt.fr_neg_asset > 0.0) #up to here fr_neg_asset is actually the count with negative assets, not the fraction
+        mmt.avg_income_neg_asset = mmt.avg_income_neg_asset / mmt.fr_neg_asset;
+        mmt.avg_indiv_debt_income = mmt.avg_indiv_debt_income/mmt.fr_neg_asset;
+        mmt.avg_s = mmt.avg_s/mmt.fr_neg_asset;
+        mmt.fr_s1 = mmt.fr_s1/mmt.fr_neg_asset;
+        mmt.avg_debt = mmt.avg_debt/mmt.fr_neg_asset;
+        mmt.extent_delinq = mmt.extent_delinq/mmt.fr_neg_asset;
+    else 
+        mmt.avg_income_neg_asset = 0.0;
+        mmt.avg_indiv_debt_income = 0.0;
+        mmt.avg_s = 0.0;
+        mmt.fr_s1 = 0.0;
+        mmt.avg_debt = 0.0;
+        mmt.extent_delinq = 0.0;
+    end
     if idx_neg>0
         mmt.mpc_ac0 = mmt.mpc_ac0 / denom_assets;
         mmt.mpc_cor_neg_asset = cor(MPCs_negassets[1:idx_neg,:]);

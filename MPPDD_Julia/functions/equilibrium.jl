@@ -48,7 +48,7 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
     rhigh = max(2*mod.r - rlow, 0.04);
 
 
-    for qiter = 1:15
+    for qiter = 1:maxiterq
        
         @time backwardSolve!(ms,mod, N_ages, N_a, N_z, N_ε, ms.Q0);
         excessdemand =0.0;
@@ -85,20 +85,12 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
             end
             println("The number of bad0 payment shares: $sbad0, $sbad0T were young . Number of interior payment shares: $sinterior")
         else 
-            mmt_i = moments();
-            sim_hists!(mod,ht,ms,mmt_i,N_ages,N_a,N_z,N_ε);
-            excessdemand = mean(ht.ahist);
+            sim_hists!(mod,ht,ms,mmt,N_ages,N_a,N_z,N_ε);
+            excessdemand = mmt.net_asset_supply - mod.exog_asset_demand;
             println("Excess demand is $excessdemand")
-            if excessdemand >0
-                rhigh = mod.r;
-            else
-                rlow = mod.r;
-            end 
-            mod.r = 0.5*(rhigh + rlow);
+            
         end
       
-        #this seems to be an allocation/creation operation rather than element-wise assignment
-        # Q0 = deepcopy(Q);
         if fullcommit == false && constQ==false
             for t=1:N_ages
                 for zi = 1:N_z
@@ -108,10 +100,16 @@ function solveQ!(mod::model,ms::sol,ht::hists,mmt::moments)
                 end
             end
         else 
+            if excessdemand >0
+                rhigh = mod.r;
+            else
+                rlow = mod.r;
+            end 
+            mod.r = 0.5*(rhigh + rlow);
+
             ms.Q0 .= 1.0/(1.0 + mod.r);
             Qdist  = rhigh-rlow;
             println("New interest rate is $(mod.r) and bounds: $rlow,$rhigh")
-            
         end 
         
         
