@@ -67,6 +67,7 @@
         Ygrid::Array{Float64,3}
         asset_grid::Array{Float64,2}
         cbar::Float64
+        exog_asset_demand::Float64
         γ::Int64
         ϕ_1::Float64 #average cost level
         ϕ_2::Float64 # curvature
@@ -77,7 +78,7 @@
         λ::Float64
         transfer_grid::Array{Float64,1}
 
-        model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.γ =1; return modd)
+        model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.exog_asset_demand = 0.0; modd.γ =1; return modd)
     end
 
     mutable struct hists
@@ -124,6 +125,7 @@
 
     mutable struct moments
         #moments from the simulation to return
+        net_asset_supply::Float64
         fr_neg_asset::Float64
         avg_indiv_debt_income::Float64
         avg_debt::Float64
@@ -139,6 +141,7 @@
 
     function moments()
         #constructor for moments
+        net_asset_supply = 0.0
         fr_neg_asset = 0.0
         avg_indiv_debt_income =0.0
         avg_debt =0.0
@@ -151,7 +154,8 @@
         mpc_cor_pos_asset = zeros(3,3)
         mpc_ac0 = 0.0
 
-        return moments(fr_neg_asset,avg_indiv_debt_income,avg_debt,avg_income,avg_income,extent_delinq,avg_s,fr_s1,mpc_cor_neg_asset,mpc_cor_pos_asset,mpc_ac0)
+        return moments(net_asset_supply,fr_neg_asset,avg_indiv_debt_income,avg_debt,avg_income,avg_income_neg_asset,
+            extent_delinq,avg_s,fr_s1,mpc_cor_neg_asset,mpc_cor_pos_asset,mpc_ac0)
     end
 
 

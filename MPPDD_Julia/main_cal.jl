@@ -87,6 +87,7 @@ end
         Ygrid::Array{Float64,3}
         asset_grid::Array{Float64,2}
         cbar::Float64
+        exog_asset_demand::Float64
         γ::Int64
         ϕ_1::Float64 #average cost level
         ϕ_2::Float64 # curvature
@@ -97,7 +98,7 @@ end
         λ::Float64
         transfer_grid::Array{Float64,1}
 
-        model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.γ =1; return modd)
+        model() = (modd = new();modd.asset_grid=zeros(N_ages,N_a); modd.cbar = 0.0; modd.exog_asset_demand = 0.0; modd.γ =1; return modd)
     end
 
     mutable struct hists
@@ -144,6 +145,7 @@ end
 
     mutable struct moments
         #moments from the simulation to return
+        net_asset_supply::Float64
         fr_neg_asset::Float64
         avg_indiv_debt_income::Float64
         avg_debt::Float64
@@ -159,6 +161,7 @@ end
 
     function moments()
         #constructor for moments
+        net_asset_supply = 0.0;
         fr_neg_asset = 0.0
         avg_indiv_debt_income =0.0
         avg_debt =0.0
@@ -171,7 +174,7 @@ end
         mpc_cor_pos_asset = zeros(3,3)
         mpc_ac0 = 0.0
 
-        return moments(fr_neg_asset,avg_indiv_debt_income,avg_debt,avg_income,avg_income,extent_delinq,avg_s,fr_s1,mpc_cor_neg_asset,mpc_cor_pos_asset,mpc_ac0)
+        return moments(net_asset_supply,fr_neg_asset,avg_indiv_debt_income,avg_debt,avg_income,avg_income,extent_delinq,avg_s,fr_s1,mpc_cor_neg_asset,mpc_cor_pos_asset,mpc_ac0)
     end
 
 
@@ -201,7 +204,7 @@ end
     const grid_curvature = 2.0;  #unevenly spaced grid points. >0 means more close to 0
 
     ## Income Process  - from Kaplan & Violante (2010)
-    ρ          =  1.0;
+    ρ          =  0.999; #should've been 1, but I worry about the ergod distribution.
     σ_η       = (0.01/freq)^(1/2);  # Variance of permanent income shocks = 0.01
     σ_z0      = (0.15/freq)^(1/2);  # Variance of permanent income shocks = 0.15
     σ_ε       = (0.05/freq)^(1/2);  # Variance of transitory income shocks = 0.05
@@ -244,10 +247,11 @@ end
     Takes in parameters, outputs moments / parameters to CSV
     """
     function params_moments(iofilename, parvals, j)
-        ht = hists();
-
-        mod      = model();
         parval = parvals[j];
+        
+        ht = hists();
+        
+        mod      = model();
         mod.β    = parval[:β];
         mod.r    = parval[:r];
         mod.ϕ_1  = parval[:ϕ_1];
@@ -269,9 +273,8 @@ end
 
         println("Drawing shocks on PID $pidnum, $workernum at j $j !");
         draw_shocks!(mod,ht, 12281951);
-
-        ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         
+        ms.Q0 = solveQ!(mod,ms,ht,mmt) ;
         if fullcommit == true
             saveloc = string(saveroot,"modEnvr_commitment",j,".jld")
             @save saveloc mod
@@ -405,11 +408,11 @@ end
 #        (:λ , collect(LinRange(0.0, 0.06, 3))) ]);
 
 #estimate_elasticities(param_grids)
-beta_grid = OrderedDict{Symbol,Array{Float64,1}}([(:β, collect(LinRange(0.9,0.97,32)) ) ]) ;
+beta_grid = OrderedDict{Symbol,Array{Float64,1}}([(:β, collect(LinRange(0.83,0.97,30)) ) ]) ;
 cal_fullcommit( beta_grid )
 
 beta_phi_grid = OrderedDict{Symbol,Array{Float64,1}}([
-    (:β,collect(LinRange(0.9,0.97,8))  ), (:ϕ_1, collect(LinRange(0.05,0.25,5)) ), (:ϕ_2, collect(LinRange(1.5,4,6)) ) ]) ;
+    (:β,collect(LinRange(0.83,0.97,15))  ), (:ϕ_1, collect(LinRange(0.05,0.25,5)) ), (:ϕ_2, collect(LinRange(1.5,4,6)) ) ]) ;
 cal_constQ( beta_phi_grid )
 
 
